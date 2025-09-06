@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "vscode-process-herder": {
+      "command": "node",
+      "args": ["C:\\tmp\\ai-vsc-process-herder\\build\\index.js"],
+      "env": {},
+      "description": "VS Code Process Herder - Intelligent process management for development workflows"
+    }
+  }
+}

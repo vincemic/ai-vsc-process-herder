@@ -1,0 +1,55 @@
+{
+  "name": "vscode-process-herder-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for VS Code process management - helps AI assistants manage development processes intelligently",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "vscode-process-herder": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "vscode",
+    "process-management",
+    "development-tools",
+    "ai-assistant",
+    "github-copilot"
+  ],
+  "author": "VS Code Process Herder",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "cross-spawn": "^7.0.3",
+    "ps-list": "^8.1.1",
+    "tree-kill": "^1.2.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
+    "@types/jest": "^29.0.0",
+    "@types/node": "^20.19.13",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "prettier": "^3.0.0",
+    "ts-jest": "^29.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "build",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

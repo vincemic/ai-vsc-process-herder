@@ -46,7 +46,7 @@ The VS Code Process Herder MCP server provides standardized tools for AI assista
 ## Workflow Support
 
 - Frontend/backend development
-- Testing workflows  
+- Testing workflows
 - Build processes
 - Development servers
 - Custom scripts and tools

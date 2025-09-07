@@ -1,16 +1,25 @@
 # VS Code Process Herder MCP Server
 
-A TypeScript-based MCP (Model Context Protocol) server that provides intelligent process management for VS Code development workflows. This server acts as a standardized interface for AI assistants like GitHub Copilot to manage development processes without confusion.
+A TypeScript-based MCP (Model Context Protocol) server that provides **enterprise-grade intelligent process management** for VS Code development workflows. This server acts as a standardized interface for AI assistants like GitHub Copilot to manage development processes without confusion.
 
 ## 🚀 Features
 
+### Core Process Management
 - **VS Code Tasks Integration**: Read and execute tasks from `tasks.json`
 - **Process Lifecycle Management**: Start, stop, restart, and monitor processes
 - **Intelligent Process Detection**: Automatically detect common development scenarios
-- **Status Monitoring**: Query running processes and their health
 - **Project Type Detection**: Auto-detect project type and suggest relevant tasks
 - **Multi-Project Support**: Handle multiple workspace configurations
 - **Cross-Platform**: Works on Windows, macOS, and Linux
+
+### 🆕 Enhanced Reliability Features
+- **Advanced Health Monitoring**: Real-time process health assessment with scoring
+- **Intelligent Auto-Recovery**: Automatic healing of failed processes with configurable strategies
+- **Persistent State Management**: Process state survives restarts and crashes
+- **Comprehensive Logging & Metrics**: Full observability into process behavior
+- **Proactive Issue Detection**: Early warning system for potential problems
+
+> ⚡ **New in v2.0**: The Process Herder now includes enterprise-grade reliability features that make it suitable for production development environments. See [IMPROVEMENTS.md](IMPROVEMENTS.md) for detailed information about the enhancements.
 
 ## 🛠 Installation
 
@@ -51,7 +60,7 @@ To use this server with GitHub Copilot or other AI assistants, you'll need to co
 
 ## 🔧 Available Tools
 
-### Process Management
+### Core Process Management
 
 1. **list-tasks**: List all available VS Code tasks from `tasks.json`
 2. **start-task**: Start a specific task by name
@@ -64,6 +73,14 @@ To use this server with GitHub Copilot or other AI assistants, you'll need to co
 
 7. **detect-project-type**: Analyze workspace to detect project type and suggest tasks
 8. **get-vscode-status**: Check VS Code integration status and workspaces
+
+### 🆕 Enhanced Reliability Tools
+
+9. **get-health-summary**: Get comprehensive health overview of all monitored processes
+10. **configure-recovery**: Set up automatic recovery strategies for processes
+11. **get-process-logs**: Advanced log filtering and search with category support
+12. **get-process-metrics**: Performance metrics and analytics for tracked processes
+13. **export-diagnostics**: Export comprehensive diagnostic data for troubleshooting
 
 ## 🏗 Architecture
 

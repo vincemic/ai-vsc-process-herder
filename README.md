@@ -46,6 +46,137 @@ npm install
 npm run build
 ```
 
+## 🤖 AI Integration Prompts
+
+### Best Prompts for GitHub Copilot & Claude
+
+To ensure AI assistants properly leverage the Process Herder MCP server for VS Code debugging and development workflows, use these proven prompt templates:
+
+#### **Primary Prompt Template**
+
+```text
+I'm debugging a [PROJECT_TYPE] project in VS Code. Please use the VS Code Process Herder MCP server to help me:
+
+1. **Analyze the current state**: Check what processes are running and their health
+2. **Start debug workflow**: Launch the appropriate development servers and debug configuration
+3. **Monitor and troubleshoot**: Track process health and logs during debugging
+
+Current context:
+- Project type: [e.g., TypeScript Node.js, React, Python, etc.]
+- Issue: [Brief description of what you're debugging]
+- Environment: VS Code with Process Herder MCP server available
+
+Please start by checking the current process status and VS Code integration, then suggest the best debugging approach.
+```
+
+#### **For Initial Debug Setup**
+
+```text
+I need to debug my VS Code project. Use the Process Herder MCP server to:
+1. Run `get-vscode-status` to check VS Code integration
+2. Run `detect-project-type` to analyze my workspace
+3. Run `list-tasks` to see available VS Code tasks
+4. Start the appropriate debug workflow based on the project type
+
+Then guide me through the debugging process using the MCP tools.
+```
+
+#### **For Multi-Process Debugging**
+
+```text
+I'm debugging a full-stack application in VS Code. Use the Process Herder MCP server to:
+1. Check current running processes with `list-processes`
+2. Start a coordinated test run with `start-test-run` including:
+   - Backend service with readiness probe
+   - Frontend service with readiness probe  
+   - Debug configuration
+3. Monitor the health and logs of all processes
+
+Project has both backend and frontend components that need to run simultaneously.
+```
+
+#### **For Troubleshooting Existing Issues**
+
+```text
+I have processes running but something isn't working correctly. Use the Process Herder MCP server to:
+1. Get `get-health-summary` for overall system status
+2. Use `get-process-status` for specific failing processes
+3. Check `get-process-logs` for error messages
+4. Suggest recovery actions using `restart-process` or `configure-recovery`
+
+Help me diagnose and fix the issues.
+```
+
+#### **Complete Example Prompt**
+
+```text
+I'm debugging a TypeScript Node.js MCP server project in VS Code. The build completed successfully, but I need to test the MCP functionality.
+
+Please use the VS Code Process Herder MCP server to help me:
+
+1. **Initial Analysis**:
+   - Run `get-vscode-status` to verify VS Code integration
+   - Run `detect-project-type` to confirm project setup
+   - Run `list-tasks` to see what VS Code tasks are available
+
+2. **Start Debug Session**:
+   - Use the "Debug MCP Server" launch configuration 
+   - Start the MCP server process with proper monitoring
+   - Set up health monitoring and logging
+
+3. **Test MCP Tools**:
+   - Start a test run using the MCP server's own tools
+   - Monitor process health during testing
+   - Capture any errors or issues in the logs
+
+4. **Troubleshoot Issues**:
+   - If anything fails, use process status and logs to diagnose
+   - Suggest recovery strategies
+
+The project has tasks for building, testing, and running the MCP server. I want to ensure everything works correctly before deploying.
+```
+
+### **Key Phrases for Triggering MCP Usage**
+
+Always include these phrases in your prompts to ensure AI assistants use the MCP server:
+
+- **"Use the Process Herder MCP server"** or **"Use the VS Code Process Herder MCP"**
+- **"Check the MCP tools available"**
+- **"Start with process analysis"**
+- **"Monitor process health"**
+- **"Use coordinated workflow"**
+
+### **Workflow-Specific Prompts**
+
+#### **For Test Debugging**
+
+```text
+I need to debug failing tests. Use the Process Herder MCP to:
+1. Start backend services with readiness probes
+2. Launch test processes with proper dependencies
+3. Use `start-test-run` for coordinated execution
+4. Monitor test progress and capture detailed logs
+```
+
+#### **For Performance Debugging**
+
+```text
+I'm debugging performance issues. Use the Process Herder MCP to:
+1. Get baseline metrics with `get-process-metrics`
+2. Monitor resource usage during debugging
+3. Use `get-health-summary` to identify bottlenecks
+4. Set up process monitoring with alerts
+```
+
+### **Pro Tips for Effective MCP Usage**
+
+1. **Always mention the MCP server by name** in your prompts
+2. **Be specific about the workflow** (debugging, testing, development)
+3. **Include your project context** (language, framework, current state)
+4. **Ask for step-by-step analysis** using the MCP tools
+5. **Request health monitoring** throughout the process
+6. **Mention specific MCP tool names** when you know what you need
+
 ## 📖 Usage
 
 ### Starting the MCP Server

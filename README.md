@@ -29,18 +29,89 @@ A TypeScript-based MCP (Model Context Protocol) server that provides **enterpris
 
 ## 🛠 Installation
 
-### Prerequisites
+### Option 1: Global Installation from GitHub (Recommended)
+
+This is the easiest way to install and use the VS Code Process Herder MCP server across all your projects.
+
+#### Prerequisites
+
+- Node.js 18 or higher
+- npm (comes with Node.js)
+- Git (for GitHub access)
+
+#### Install Globally
+
+```powershell
+npm install -g git+https://github.com/vincemic/ai-vsc-process-herder.git
+```
+
+This command will:
+
+1. Clone the repository from GitHub
+2. Install dependencies
+3. Build the TypeScript project
+4. Install the `vscode-process-herder` command globally
+
+#### Verify Installation
+
+After installation, verify it works:
+
+```powershell
+# Check if the command is available
+vscode-process-herder --help
+
+# Test the MCP server (should show MCP protocol initialization)
+echo '{"jsonrpc": "2.0", "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "test", "version": "1.0.0"}}, "id": 1}' | vscode-process-herder
+```
+
+#### Test with VS Code
+
+1. **Reload VS Code** after configuring the MCP server
+2. **Open Copilot Chat** and test with these prompts:
+
+```text
+list the available tools from process-herder
+```
+
+```text
+Use process-herder to detect what type of project this is
+```
+
+```text
+Use process-herder to list all available VS Code tasks
+```
+
+#### Update to Latest Version
+
+To update to the latest version from GitHub:
+
+```powershell
+npm update -g vscode-process-herder-mcp
+```
+
+Or reinstall:
+
+```powershell
+npm uninstall -g vscode-process-herder-mcp
+npm install -g git+https://github.com/vincemic/ai-vsc-process-herder.git
+```
+
+### Option 2: Local Development Installation
+
+For development or customization purposes:
+
+#### Development Prerequisites
 
 - Node.js 18 or higher
 - VS Code (optional, but recommended)
 
-### Install Dependencies
+#### Install Dependencies
 
 ```bash
 npm install
 ```
 
-### Build the Project
+#### Build the Project
 
 ```bash
 npm run build
@@ -193,54 +264,64 @@ The server runs on stdio and follows the MCP protocol specification.
 
 ### Integration with AI Assistants
 
-To use this server with GitHub Copilot or other AI assistants, you'll need to configure it as an MCP server in your AI assistant's settings.
+After global installation, you can configure the MCP server in your AI assistant's settings using the global `vscode-process-herder` command.
 
 #### GitHub Copilot (VS Code)
 
-1. Build (or use `npm run dev` for auto-reload):
-
-   ```bash
-   npm run build
-   ```
-
-2. Add (or extend) the `github.copilot.chat.mcpServers` section in your VS Code `settings.json` (User or Workspace):
-
-   ```jsonc
-   {
-     "github.copilot.chat.mcpServers": {
-       "process-herder": {
-         "command": "node",
-         "args": ["${workspaceFolder}/build/index.js"],
-         "cwd": "${workspaceFolder}",
-         "env": {
-           // Optional: reduce recovery noise in chats
-           "PROCESS_HERDER_SILENT_RECOVERY": "1"
-         }
-       }
-     }
-   }
-   ```
-
-3. Reload VS Code. Open Copilot Chat and run a test prompt, e.g.:
-
-   > list the available tools from process-herder
-
-If you use `npm run dev`, change `args` to `["${workspaceFolder}/build/index.js"]` after initial build is produced; or point to `src/index.ts` via `tsx`/`ts-node` if preferred (ensure dev dependency installed):
+Add the following to your VS Code `settings.json` (User or Workspace settings):
 
 ```jsonc
-"args": ["${workspaceFolder}/src/index.ts"],
-"command": "npx",
-"env": { "NODE_NO_WARNINGS": "1" }
+{
+  "github.copilot.chat.mcpServers": {
+    "process-herder": {
+      "command": "vscode-process-herder",
+      "env": {
+        // Optional: reduce recovery noise in chats
+        "PROCESS_HERDER_SILENT_RECOVERY": "1"
+      }
+    }
+  }
+}
+```
+
+**For local development** (if you cloned the repo instead of global install):
+
+```jsonc
+{
+  "github.copilot.chat.mcpServers": {
+    "process-herder": {
+      "command": "node",
+      "args": ["${workspaceFolder}/build/index.js"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PROCESS_HERDER_SILENT_RECOVERY": "1"
+      }
+    }
+  }
+}
 ```
 
 #### Anthropic Claude (Desktop / Web)
 
 Create or edit the Claude MCP config file:
 
-- macOS: `~/Library/Application Support/Claude/mcp/servers.json`
-- Windows: `%APPDATA%/Claude/mcp/servers.json` (e.g. `C:\\Users\\<you>\\AppData\\Roaming\\Claude\\mcp\\servers.json`)
+- **macOS**: `~/Library/Application Support/Claude/mcp/servers.json`
+- **Windows**: `%APPDATA%/Claude/mcp/servers.json` (e.g. `C:\Users\<username>\AppData\Roaming\Claude\mcp\servers.json`)
 
-Add an entry:
+Add this entry for global installation:
+
+```json
+{
+  "process-herder": {
+    "command": "vscode-process-herder",
+    "env": {
+      "PROCESS_HERDER_SILENT_RECOVERY": "1"
+    }
+  }
+}
+```
+
+**For local development** (if you cloned the repo instead of global install):
 
 ```jsonc
 {

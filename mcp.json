@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "process-herder": {
+      "command": "node",
+      "args": ["build/index.js"],
+      "cwd": ".",
+      "env": {
+        "PROCESS_HERDER_SILENT_RECOVERY": "1"
+      }
+    }
+  }
+}

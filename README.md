@@ -139,7 +139,7 @@ Run the server directly:
 npx @modelcontextprotocol/cli run --server "node build/index.js"
 ```
 
-Or create a simple JSON config `mcp.json`:
+Or use the included `mcp.json` (already in repo) or create your own:
 
 ```json
 {
@@ -157,6 +157,12 @@ Then:
 
 ```bash
 npx @modelcontextprotocol/cli shell --config mcp.json
+```
+
+Or via provided npm script (after build):
+
+```bash
+npm run mcp:shell
 ```
 
 Test inside the shell:

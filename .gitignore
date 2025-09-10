@@ -16,8 +16,8 @@ dist/
 .env.test.local
 .env.production.local
 
-# IDE and editor files
-.vscode/settings.json
+# IDE and editor files (keep most untracked; allow settings.json for MCP config)
+# (If you want to ignore again, re-add .vscode/settings.json)
 .idea/
 *.swp
 *.swo

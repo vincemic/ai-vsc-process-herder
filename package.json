@@ -10,6 +10,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
+    "mcp:run": "node build/index.js",
+    "mcp:shell": "npx @modelcontextprotocol/cli shell --config mcp.json",
     "test": "jest",
     "test:playwright": "playwright test",
     "test:playwright:ui": "playwright test --ui",

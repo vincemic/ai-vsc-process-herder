@@ -8,6 +8,7 @@
     "vscode-process-herder": "./build/index.js"
   },
   "scripts": {
+    "prepare": "npm run build",
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "mcp:run": "node build/index.js",

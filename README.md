@@ -268,15 +268,21 @@ After global installation, you can configure the MCP server in your AI assistant
 
 #### GitHub Copilot (VS Code)
 
-Add the following to your VS Code `settings.json` (User or Workspace settings):
+Add the following configuration to your VS Code `settings.json`:
 
-```jsonc
+**Location Options:**
+
+- **User Settings** (applies to all workspaces): `File → Preferences → Settings → Open Settings (JSON)`
+- **Workspace Settings** (applies to current workspace only): `.vscode/settings.json` in your project
+
+**Recommended Configuration (Global Installation):**
+
+```json
 {
   "github.copilot.chat.mcpServers": {
     "process-herder": {
       "command": "vscode-process-herder",
       "env": {
-        // Optional: reduce recovery noise in chats
         "PROCESS_HERDER_SILENT_RECOVERY": "1"
       }
     }
@@ -284,9 +290,39 @@ Add the following to your VS Code `settings.json` (User or Workspace settings):
 }
 ```
 
-**For local development** (if you cloned the repo instead of global install):
+**Alternative Configurations:**
 
-```jsonc
+*Minimal configuration:*
+
+```json
+{
+  "github.copilot.chat.mcpServers": {
+    "process-herder": {
+      "command": "vscode-process-herder"
+    }
+  }
+}
+```
+
+*With additional environment variables:*
+
+```json
+{
+  "github.copilot.chat.mcpServers": {
+    "process-herder": {
+      "command": "vscode-process-herder",
+      "env": {
+        "PROCESS_HERDER_SILENT_RECOVERY": "1",
+        "PROCESS_HERDER_CRASH_GRACE_MS": "5000"
+      }
+    }
+  }
+}
+```
+
+**For Local Development** (if you cloned the repo instead of global install):
+
+```json
 {
   "github.copilot.chat.mcpServers": {
     "process-herder": {
@@ -300,6 +336,13 @@ Add the following to your VS Code `settings.json` (User or Workspace settings):
   }
 }
 ```
+
+**After Configuration:**
+
+1. **Restart VS Code** to load the new MCP server configuration
+2. **Open Copilot Chat** (`Ctrl+Shift+I` or `Cmd+Shift+I`)
+3. **Test the connection** with: `list the available tools from process-herder`
+4. **Verify functionality** with: `Use process-herder to detect what type of project this is`
 
 #### Anthropic Claude (Desktop / Web)
 

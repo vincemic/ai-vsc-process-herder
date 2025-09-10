@@ -11,6 +11,8 @@ import { HealthMonitor } from "./health-monitor.js";
 import { ProcessRecoveryManager } from "./recovery-manager.js";
 import { ProcessStateManager } from "./state-manager.js";
 import { LoggingManager } from "./logging-manager.js";
+import { inferRole } from "./role-classifier.js";
+import { TestRunManager } from "./test-run-manager.js";
 
 /**
  * VS Code Process Herder MCP Server
@@ -29,6 +31,7 @@ class VSCodeProcessHerderServer {
   private recoveryManager: ProcessRecoveryManager;
   private stateManager: ProcessStateManager;
   private loggingManager: LoggingManager;
+  private testRunManager: TestRunManager;
 
   constructor() {
     this.server = new McpServer(
@@ -57,6 +60,7 @@ class VSCodeProcessHerderServer {
       this.processManager,
       this.healthMonitor,
     );
+    this.testRunManager = new TestRunManager(this.processManager);
 
     this.setupIntegrations();
 
@@ -120,6 +124,171 @@ class VSCodeProcessHerderServer {
 
   private setupTools() {
     // Tool: List available VS Code tasks
+    // Test run lifecycle tools
+    this.server.registerTool(
+      "start-test-run",
+      {
+        title: "Start Test Run",
+        description: "Start a coordinated test run with optional backend/frontend services",
+        inputSchema: {
+          id: z.string().describe("Unique test run id"),
+          name: z.string().optional(),
+          backend: z
+            .object({
+              command: z.string(),
+              args: z.array(z.string()).optional(),
+              cwd: z.string().optional(),
+              readiness: z
+                .object({
+                  type: z.enum(["port", "log", "http"]),
+                  value: z.any(),
+                  timeoutMs: z.number().optional(),
+                  intervalMs: z.number().optional(),
+                })
+                .optional(),
+              singleton: z.boolean().optional(),
+            })
+            .optional(),
+          frontend: z
+            .object({
+              command: z.string(),
+              args: z.array(z.string()).optional(),
+              cwd: z.string().optional(),
+              readiness: z
+                .object({
+                  type: z.enum(["port", "log", "http"]),
+                  value: z.any(),
+                  timeoutMs: z.number().optional(),
+                  intervalMs: z.number().optional(),
+                })
+                .optional(),
+              singleton: z.boolean().optional(),
+            })
+            .optional(),
+          tests: z.object({
+            command: z.string(),
+            args: z.array(z.string()).optional(),
+            cwd: z.string().optional(),
+            readiness: z
+              .object({
+                type: z.enum(["port", "log", "http"]),
+                value: z.any(),
+                timeoutMs: z.number().optional(),
+                intervalMs: z.number().optional(),
+              })
+              .optional(),
+          }),
+          autoStop: z.boolean().optional().default(true),
+          keepBackends: z.boolean().optional().default(false),
+        },
+      },
+      async (input) => {
+        try {
+          // Normalize readiness objects to strict union shapes
+          const normalize = (r: any) => {
+            if (!r) return undefined;
+            if (r.type === "port") return { type: "port" as const, value: Number(r.value), timeoutMs: r.timeoutMs, intervalMs: r.intervalMs };
+            if (r.type === "http") return { type: "http" as const, value: String(r.value), timeoutMs: r.timeoutMs, intervalMs: r.intervalMs };
+            if (r.type === "log") return { type: "log" as const, value: r.value instanceof RegExp ? r.value : String(r.value), timeoutMs: r.timeoutMs };
+            return undefined;
+          };
+          const run = await this.testRunManager.startRun({
+            id: input.id,
+            name: input.name,
+            backend: input.backend ? { ...input.backend, readiness: normalize(input.backend.readiness) } : undefined,
+            frontend: input.frontend ? { ...input.frontend, readiness: normalize(input.frontend.readiness) } : undefined,
+            tests: { ...input.tests, readiness: normalize(input.tests.readiness) },
+            autoStop: input.autoStop,
+            keepBackends: input.keepBackends,
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ success: true, run }, null, 2),
+              },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    success: false,
+                    error: error instanceof Error ? error.message : String(error),
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    this.server.registerTool(
+      "get-test-run-status",
+      {
+        title: "Get Test Run Status",
+        description: "Retrieve status for a specific test run",
+        inputSchema: { id: z.string().describe("Test run id") },
+      },
+      async ({ id }) => {
+        const run = this.testRunManager.getRun(id);
+        if (!run) {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify({ error: "Not found", id }, null, 2) },
+            ],
+            isError: true,
+          };
+        }
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(run, null, 2) },
+          ],
+        };
+      },
+    );
+
+    this.server.registerTool(
+      "abort-test-run",
+      {
+        title: "Abort Test Run",
+        description: "Abort a running test run and optionally stop services",
+        inputSchema: { id: z.string().describe("Test run id") },
+      },
+      async ({ id }) => {
+        try {
+          const run = await this.testRunManager.abortRun(id);
+          return { content: [{ type: "text", text: JSON.stringify(run, null, 2) }] };
+        } catch (error) {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify({ error: error instanceof Error ? error.message : String(error), id }, null, 2) },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    this.server.registerTool(
+      "list-test-runs",
+      {
+        title: "List Test Runs",
+        description: "List all test runs and their statuses",
+        inputSchema: {},
+      },
+      async () => {
+        const runs = this.testRunManager.listRuns();
+        return { content: [{ type: "text", text: JSON.stringify(runs, null, 2) }] };
+      },
+    );
     this.server.registerTool(
       "list-tasks",
       {
@@ -207,6 +376,8 @@ class VSCodeProcessHerderServer {
             cwd: result.cwd,
             startTime: new Date(),
             isTask: true,
+            role: inferRole(taskName),
+            // Could extend with default readiness heuristics later
           });
 
           return {
@@ -435,14 +606,22 @@ class VSCodeProcessHerderServer {
             .string()
             .optional()
             .describe("Filter processes by name or command (case-insensitive)"),
+          role: z
+            .enum(["frontend", "backend", "test", "e2e", "utility"])
+            .optional()
+            .describe("Filter by inferred/assigned role"),
         },
       },
-      async ({ includeSystem = false, filter }) => {
+      async ({ includeSystem = false, filter, role }) => {
         try {
           const processes = await this.processManager.listProcesses(
             includeSystem,
             filter,
           );
+
+          const filtered = role
+            ? processes.filter((p) => p.metadata?.role === role)
+            : processes;
 
           return {
             content: [
@@ -450,7 +629,7 @@ class VSCodeProcessHerderServer {
                 type: "text",
                 text: JSON.stringify(
                   {
-                    processes: processes.map((proc) => ({
+                    processes: filtered.map((proc) => ({
                       pid: proc.pid,
                       name: proc.name,
                       command: proc.cmd,
@@ -459,9 +638,10 @@ class VSCodeProcessHerderServer {
                       startTime: proc.metadata?.startTime,
                       isTask: proc.metadata?.isTask || false,
                       cwd: proc.metadata?.cwd,
+                      role: proc.metadata?.role || inferRole(proc.name),
                     })),
-                    totalCount: processes.length,
-                    managedCount: processes.filter((p) => p.metadata).length,
+                    totalCount: filtered.length,
+                    managedCount: filtered.filter((p) => p.metadata).length,
                   },
                   null,
                   2,
@@ -475,6 +655,121 @@ class VSCodeProcessHerderServer {
               {
                 type: "text",
                 text: `Error listing processes: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // Tool: Start arbitrary process with role support
+    this.server.registerTool(
+      "start-process",
+      {
+        title: "Start Arbitrary Process",
+        description:
+          "Start a process by command with optional role classification and metadata.",
+        inputSchema: {
+          command: z.string().describe("Executable or script to run"),
+          args: z.array(z.string()).optional().default([]),
+          cwd: z
+            .string()
+            .optional()
+            .describe("Working directory (defaults to workspace root)"),
+          name: z.string().optional().describe("Friendly name for the process"),
+          role: z
+            .enum(["frontend", "backend", "test", "e2e", "utility"])
+            .optional()
+            .describe("Explicit role; inferred if omitted"),
+          tags: z.array(z.string()).optional().describe("Arbitrary tag strings"),
+          singleton: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("If true, reuse existing matching process instead of starting new"),
+          readiness: z
+            .object({
+              type: z.enum(["port", "log", "http"]).describe("Readiness probe type"),
+              value: z.any().describe("Port number, log pattern, or URL"),
+              timeoutMs: z.number().optional(),
+              intervalMs: z.number().optional(),
+            })
+            .optional()
+            .describe("Optional readiness probe configuration"),
+        },
+      },
+      async ({ command, args = [], cwd, name, role, tags, singleton = false, readiness }) => {
+        try {
+          const inferredRole = role || inferRole(name || command);
+          // Normalize readiness to strong typed union
+          let readinessConfig: any = undefined;
+          if (readiness) {
+            if (readiness.type === "port") {
+              readinessConfig = {
+                type: "port",
+                value: Number(readiness.value),
+                timeoutMs: readiness.timeoutMs,
+                intervalMs: readiness.intervalMs,
+              };
+            } else if (readiness.type === "log") {
+              readinessConfig = {
+                type: "log",
+                value: readiness.value,
+                timeoutMs: readiness.timeoutMs,
+              };
+            } else if (readiness.type === "http") {
+              readinessConfig = {
+                type: "http",
+                value: String(readiness.value),
+                timeoutMs: readiness.timeoutMs,
+                intervalMs: readiness.intervalMs,
+              };
+            }
+          }
+          const result = await this.processManager.startProcess(
+            command,
+            args,
+            { cwd, name, role: inferredRole, tags, singleton, readiness: readinessConfig },
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    processId: result.processId,
+                    command: result.command,
+                    args: result.args,
+                    cwd: result.cwd,
+                    role: inferredRole,
+                    reused: result.reused || false,
+                    ready: result.ready,
+                    readyAt: result.readyAt,
+                    readiness: readinessConfig || null,
+                    message: `Process '${name || command}' started with role ${inferredRole}`,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    success: false,
+                    command,
+                    error: error instanceof Error ? error.message : String(error),
+                  },
+                  null,
+                  2,
+                ),
               },
             ],
             isError: true,

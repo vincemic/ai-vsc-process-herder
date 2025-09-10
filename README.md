@@ -4,18 +4,23 @@ A TypeScript-based MCP (Model Context Protocol) server that provides **enterpris
 
 ## 🚀 Features
 
-### Core Process Management
+### Core Process Management (Overview)
 - **VS Code Tasks Integration**: Read and execute tasks from `tasks.json`
 - **Process Lifecycle Management**: Start, stop, restart, and monitor processes
+- **Direct Process Spawning (`start-process`)**: Launch arbitrary commands outside of tasks.json with structured metadata
 - **Intelligent Process Detection**: Automatically detect common development scenarios
 - **Project Type Detection**: Auto-detect project type and suggest relevant tasks
 - **Multi-Project Support**: Handle multiple workspace configurations
 - **Cross-Platform**: Works on Windows, macOS, and Linux
 
 ### 🆕 Enhanced Reliability Features
+
 - **Advanced Health Monitoring**: Real-time process health assessment with scoring
 - **Intelligent Auto-Recovery**: Automatic healing of failed processes with configurable strategies
 - **Persistent State Management**: Process state survives restarts and crashes
+- **Singleton Process Reuse**: Prevent duplicate identical processes (same role/command/cwd/args) when `singleton=true`
+- **Readiness Probes**: Port / HTTP / Log pattern based readiness gating before marking a process as ready
+- **Role & Tag Classification**: Frontend / backend / test / e2e / utility roles (auto-inferred heuristics + manual override)
 - **Comprehensive Logging & Metrics**: Full observability into process behavior
 - **Proactive Issue Detection**: Early warning system for potential problems
 
@@ -63,24 +68,103 @@ To use this server with GitHub Copilot or other AI assistants, you'll need to co
 ### Core Process Management
 
 1. **list-tasks**: List all available VS Code tasks from `tasks.json`
-2. **start-task**: Start a specific task by name
-3. **stop-process**: Stop a running process by ID or name
-4. **restart-process**: Restart a process with the same configuration
-5. **list-processes**: List all running processes managed by the server
-6. **get-process-status**: Get detailed status information for a specific process
+1. **start-task**: Start a specific task by name (auto-infers role)
+1. **start-process**: Spawn an arbitrary command with options: `cwd`, `role`, `tags`, `singleton`, `readiness` (port|log|http). Returns `reused=true` if an existing singleton instance was reused and exposes `ready/readyAt` when readiness succeeds.
+1. **stop-process**: Stop a running process by ID or name
+1. **restart-process**: Restart a process with the same configuration
+1. **list-processes**: List all running managed processes (supports optional role filtering)
+1. **get-process-status**: Get detailed status information for a specific process (includes readiness + role)
 
 ### Project Analysis
 
-7. **detect-project-type**: Analyze workspace to detect project type and suggest tasks
-8. **get-vscode-status**: Check VS Code integration status and workspaces
+1. **detect-project-type**: Analyze workspace to detect project type and suggest tasks
+1. **get-vscode-status**: Check VS Code integration status and workspaces
 
 ### 🆕 Enhanced Reliability Tools
 
-9. **get-health-summary**: Get comprehensive health overview of all monitored processes
-10. **configure-recovery**: Set up automatic recovery strategies for processes
-11. **get-process-logs**: Advanced log filtering and search with category support
-12. **get-process-metrics**: Performance metrics and analytics for tracked processes
-13. **export-diagnostics**: Export comprehensive diagnostic data for troubleshooting
+1. **get-health-summary**: Get comprehensive health overview of all monitored processes
+1. **configure-recovery**: Set up automatic recovery strategies for processes
+1. **get-process-logs**: Advanced log filtering and search with category support
+1. **get-process-metrics**: Performance metrics and analytics for tracked processes
+1. **export-diagnostics**: Export comprehensive diagnostic data for troubleshooting
+
+### 🧪 Test Run Orchestration (New)
+
+Coordinated multi-process test executions:
+
+1. **start-test-run**: Start a test run with optional `backend`, `frontend`, and required `tests` sections. Each section supports `command`, `args`, `cwd`, `readiness` (port|http|log), plus `singleton` for backend/frontend. Returns a run state object with PIDs.
+1. **get-test-run-status**: Retrieve the live status of a run (`pending|starting|running|completed|failed|aborted`) with PIDs and timestamps.
+1. **list-test-runs**: List all known test runs.
+1. **abort-test-run**: Abort a running test run; stops test process and (unless `keepBackends` true) associated backend/frontend.
+
+Example `start-test-run` input (conceptual):
+
+```json
+{
+   "id": "e2e-001",
+   "backend": { "command": "npm", "args": ["run", "dev"], "readiness": { "type": "port", "value": 3000 } },
+   "frontend": { "command": "npm", "args": ["run", "web"], "readiness": { "type": "http", "value": "http://localhost:5173" } },
+   "tests": { "command": "npx", "args": ["playwright", "test"], "readiness": { "type": "log", "value": "Running" } },
+   "autoStop": true,
+   "keepBackends": false
+}
+```
+
+Behavior:
+
+- Backends/frontends start (with readiness) before launching tests.
+- Tests are polled until exit; on completion success and `autoStop` true, supporting services are stopped (unless `keepBackends`).
+- Supports singleton reuse for heavy services to accelerate iterative test runs.
+
+### Tool: start-process (Details)
+
+Input shape (conceptual):
+
+```json
+{
+   command: string,
+   args?: string[],
+   cwd?: string,
+   role?: "frontend"|"backend"|"test"|"e2e"|"utility",
+   tags?: string[],
+   singleton?: boolean,
+   readiness?:
+      | { type: "port", value: number, timeoutMs?: number, intervalMs?: number }
+      | { type: "http", value: string, timeoutMs?: number, intervalMs?: number }
+      | { type: "log", value: string, timeoutMs?: number }
+}
+```
+Return fields (subset): `processId`, `reused?`, `role?`, `ready?`, `readyAt?`.
+
+Use cases:
+
+- Launch a backend server: `start-process {"command":"npm","args":["run","dev"],"role":"backend","singleton":true,"readiness":{"type":"port","value":3000}}`
+- Launch a playwright test runner with log readiness: `start-process {"command":"npx","args":["playwright","test"],"role":"e2e","readiness":{"type":"log","value":"\\u001b[32m\\[INFO\\]"}}`
+
+If a process with the same signature (role|command|cwd|args) exists and `singleton:true`, the existing process metadata is returned instead of spawning a duplicate.
+
+### Readiness Probes
+
+- Port: Polls attempting TCP connect until success.
+- HTTP: Performs HTTP(S) GET expecting a non-5xx status.
+- Log: Waits for a pattern (string or regex) to appear in stdout/stderr.
+Timeout defaults to 20s if not specified. On timeout or early exit the process remains managed but `ready=false` and `lastError` records the failure.
+
+### Roles & Tags
+
+Roles help the AI orchestrate workflows (e.g. ensure backend is ready before e2e tests). Roles are inferred for tasks (e.g. names containing `dev`, `serve` → frontend; `api`, `server` → backend; `test`, `playwright` → test/e2e) but can be overridden explicitly with `start-process`.
+
+### Singleton Behavior
+
+Prevent duplicated heavy services: pass `singleton:true`. If already running, the call is idempotent and returns `reused:true` plus current readiness state.
+
+### Persistence & Reattachment
+
+Managed process metadata (excluding logs) is periodically persisted to `.process-herder/processes.json`. On server restart, still-running PIDs are reattached and a reattachment log entry is injected. This allows AI clients to resume coordination without manually restarting everything.
+
+### State & Logs
+
+Logs (last 100 entries per process) are kept in-memory; summary APIs expose recent slices. Persisted JSON intentionally omits verbose logs for performance.
 
 ## 🏗 Architecture
 
@@ -154,6 +238,7 @@ restart-process --processName "npm start"
 ## 🚨 Error Handling
 
 The server provides comprehensive error handling with:
+
 - Graceful process termination
 - Meaningful error messages
 - Process state recovery
@@ -174,10 +259,11 @@ npm run format
 
 ## 📁 Project Structure
 
-```
+```text
 src/
 ├── index.ts              # Main MCP server implementation
 ├── process-manager.ts    # Process lifecycle management
+│   (singleton reuse, readiness probes, persistence)
 ├── task-manager.ts       # VS Code tasks integration
 ├── project-detector.ts   # Project type detection
 └── vscode-integration.ts # VS Code workspace integration
@@ -218,6 +304,7 @@ MIT License - see LICENSE file for details.
 ### Debug Mode
 
 Set environment variable for verbose logging:
+
 ```bash
 DEBUG=vscode-process-herder node build/index.js
 ```

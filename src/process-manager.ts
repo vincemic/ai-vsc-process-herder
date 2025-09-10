@@ -1,4 +1,9 @@
 import { spawn, ChildProcess } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
+import * as net from "net";
+import * as http from "http";
+import * as https from "https";
 import kill from "tree-kill";
 import { promisify } from "util";
 import psList from "ps-list";
@@ -24,6 +29,12 @@ export interface ProcessMetadata {
   isTask?: boolean;
   logs?: string[];
   lastError?: string;
+  role?: ProcessRole;
+  tags?: string[];
+  readiness?: ReadinessConfig;
+  ready?: boolean;
+  readyAt?: Date;
+  reattached?: boolean;
 }
 
 export interface ProcessStatus {
@@ -40,7 +51,23 @@ export interface ProcessStatus {
   logs?: string[];
   isTask?: boolean;
   lastError?: string;
+  role?: ProcessRole;
+  ready?: boolean;
+  readyAt?: Date;
+  reattached?: boolean;
 }
+
+export type ProcessRole =
+  | "frontend"
+  | "backend"
+  | "test"
+  | "e2e"
+  | "utility";
+
+export type ReadinessConfig =
+  | { type: "port"; value: number; timeoutMs?: number; intervalMs?: number }
+  | { type: "log"; value: string | RegExp; timeoutMs?: number }
+  | { type: "http"; value: string; timeoutMs?: number; intervalMs?: number };
 
 /**
  * Manages process lifecycle and monitoring for VS Code development workflows
@@ -49,11 +76,16 @@ export class ProcessManager extends EventEmitter {
   private managedProcesses = new Map<number, ProcessMetadata>();
   private processLogs = new Map<number, string[]>();
   private childProcesses = new Map<number, ChildProcess>();
+  private singletonIndex = new Map<string, number>();
+  private stateDir = path.join(process.cwd(), ".process-herder");
+  private stateFile = path.join(this.stateDir, "processes.json");
+  private persistTimer?: NodeJS.Timeout;
 
   constructor() {
     super();
     // Clean up orphaned processes on startup
     this.cleanupOrphanedProcesses();
+    this.loadState().catch((e) => console.error("Process state load failed", e));
   }
 
   /**
@@ -71,6 +103,7 @@ export class ProcessManager extends EventEmitter {
 
     // Emit event for integration
     this.emit("processRegistered", pid, metadata);
+    this.schedulePersist();
   }
 
   /**
@@ -124,8 +157,15 @@ export class ProcessManager extends EventEmitter {
   unregisterProcess(pid: number): void {
     this.managedProcesses.delete(pid);
     this.childProcesses.delete(pid);
+    // Remove from singleton index if present
+    for (const [sig, storedPid] of this.singletonIndex.entries()) {
+      if (storedPid === pid) {
+        this.singletonIndex.delete(sig);
+      }
+    }
     // Keep logs for a while for debugging
     setTimeout(() => this.processLogs.delete(pid), 60000); // 1 minute
+    this.schedulePersist();
   }
 
   /**
@@ -134,15 +174,46 @@ export class ProcessManager extends EventEmitter {
   async startProcess(
     command: string,
     args: string[] = [],
-    options: { cwd?: string; name?: string; isTask?: boolean } = {},
+    options: {
+      cwd?: string;
+      name?: string;
+      isTask?: boolean;
+      role?: ProcessRole;
+      tags?: string[];
+      singleton?: boolean;
+      readiness?: ReadinessConfig;
+    } = {},
   ): Promise<{
     processId: number;
     command: string;
     args: string[];
     cwd: string;
+    role?: ProcessRole;
+    ready?: boolean;
+    readyAt?: Date;
+    reused?: boolean;
   }> {
     const cwd = options.cwd || process.cwd();
     const name = options.name || command;
+
+    // Singleton signature
+    const signature = `${options.role || ""}|${command}|${cwd}|${args.join(",")}`;
+    if (options.singleton) {
+      const existingPid = this.singletonIndex.get(signature);
+      if (existingPid && this.managedProcesses.has(existingPid)) {
+        const meta = this.managedProcesses.get(existingPid)!;
+        return {
+          processId: existingPid,
+          command,
+          args,
+          cwd,
+          role: meta.role,
+          ready: meta.ready,
+          readyAt: meta.readyAt,
+          reused: true,
+        };
+      }
+    }
 
     const childProcess = spawn(command, args, {
       cwd,
@@ -163,15 +234,40 @@ export class ProcessManager extends EventEmitter {
       startTime: new Date(),
       isTask: options.isTask,
       logs: [],
+      role: options.role,
+      tags: options.tags,
+      readiness: options.readiness,
+      ready: !options.readiness, // if no readiness required treat as ready
     };
 
     this.registerChildProcess(childProcess, metadata);
+
+    if (options.singleton) {
+      this.singletonIndex.set(signature, childProcess.pid);
+    }
+
+    // Handle readiness if configured
+    if (options.readiness) {
+      try {
+        await this.awaitReadiness(childProcess, metadata, options.readiness);
+        metadata.ready = true;
+        metadata.readyAt = new Date();
+        this.addLog(childProcess.pid, `Readiness success (${options.readiness.type})`);
+      } catch (err) {
+        metadata.ready = false;
+        metadata.lastError = `Readiness failed: ${err instanceof Error ? err.message : String(err)}`;
+        this.addLog(childProcess.pid, `[ERROR] ${metadata.lastError}`);
+      }
+    }
 
     return {
       processId: childProcess.pid,
       command,
       args,
       cwd,
+      role: metadata.role,
+      ready: metadata.ready,
+      readyAt: metadata.readyAt,
     };
   }
 
@@ -386,6 +482,10 @@ export class ProcessManager extends EventEmitter {
           logs: logs.slice(-50), // Last 50 log entries
           isTask: metadata?.isTask,
           lastError: metadata?.lastError,
+          role: metadata?.role,
+          ready: metadata?.ready,
+          readyAt: metadata?.readyAt,
+          reattached: metadata?.reattached,
         };
       }
 
@@ -405,6 +505,10 @@ export class ProcessManager extends EventEmitter {
         logs: logs.slice(-50), // Last 50 log entries
         isTask: metadata?.isTask,
         lastError: metadata?.lastError,
+        role: metadata?.role,
+        ready: metadata?.ready,
+        readyAt: metadata?.readyAt,
+        reattached: metadata?.reattached,
       };
     } catch (error) {
       throw new Error(
@@ -457,6 +561,146 @@ export class ProcessManager extends EventEmitter {
     // 3. Implement process ownership verification
   }
 
+  private schedulePersist(): void {
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    this.persistTimer = setTimeout(() => this.persistState(), 200);
+  }
+
+  private persistState(): void {
+    try {
+      if (!fs.existsSync(this.stateDir)) fs.mkdirSync(this.stateDir, { recursive: true });
+      const data = Array.from(this.managedProcesses.entries()).map(([pid, meta]) => ({
+        pid,
+        name: meta.name,
+        command: meta.command,
+        args: meta.args,
+        cwd: meta.cwd,
+        startTime: meta.startTime.toISOString(),
+        isTask: meta.isTask,
+        lastError: meta.lastError,
+        role: meta.role,
+        tags: meta.tags,
+        readiness: meta.readiness,
+        ready: meta.ready,
+        readyAt: meta.readyAt ? meta.readyAt.toISOString() : undefined,
+      }));
+      fs.writeFileSync(this.stateFile, JSON.stringify({ version: 1, processes: data }, null, 2), "utf-8");
+    } catch (e) {
+      console.error("Persist state failed", e);
+    }
+  }
+
+  private async loadState(): Promise<void> {
+    if (!fs.existsSync(this.stateFile)) return;
+    try {
+      const raw = fs.readFileSync(this.stateFile, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.processes)) return;
+      const running = await psList();
+      const runningSet = new Set(running.map((p: any) => p.pid));
+      for (const saved of parsed.processes) {
+        if (runningSet.has(saved.pid)) {
+          const meta: ProcessMetadata = {
+            name: saved.name,
+            command: saved.command,
+            args: saved.args || [],
+            cwd: saved.cwd,
+            startTime: saved.startTime ? new Date(saved.startTime) : new Date(),
+            isTask: saved.isTask,
+            logs: [],
+            lastError: saved.lastError,
+            role: saved.role,
+            tags: saved.tags,
+            readiness: saved.readiness,
+            ready: saved.ready,
+            readyAt: saved.readyAt ? new Date(saved.readyAt) : undefined,
+          };
+          this.managedProcesses.set(saved.pid, meta);
+          this.processLogs.set(saved.pid, [
+            `[${new Date().toISOString()}] Reattached to existing process (PID ${saved.pid})`,
+          ]);
+        }
+      }
+    } catch (e) {
+      console.error("Load state failed", e);
+    }
+  }
+
+  private awaitReadiness(
+    child: ChildProcess,
+    metadata: ProcessMetadata,
+    readiness: ReadinessConfig,
+  ): Promise<void> {
+    const timeoutMs = readiness.timeoutMs ?? 20000;
+    const start = Date.now();
+    return new Promise((resolve, reject) => {
+      let resolved = false;
+      const finish = (err?: Error) => {
+        if (resolved) return;
+        resolved = true;
+        clearInterval(intervalHandle as any);
+        clearTimeout(timeoutHandle);
+        if (err) reject(err); else resolve();
+      };
+
+      const timeoutHandle = setTimeout(() => {
+        finish(new Error(`Timeout after ${timeoutMs}ms waiting for readiness`));
+      }, timeoutMs);
+
+      let intervalHandle: NodeJS.Timer | undefined;
+
+      switch (readiness.type) {
+        case "port": {
+          const port = readiness.value;
+            intervalHandle = setInterval(() => {
+              const socket = net.createConnection({ port }, () => {
+                socket.end();
+                finish();
+              });
+              socket.on("error", () => socket.destroy());
+            }, readiness.intervalMs ?? 300);
+          break;
+        }
+        case "http": {
+          const url = readiness.value;
+          intervalHandle = setInterval(() => {
+            const mod = url.startsWith("https") ? https : http;
+            const req = mod.get(url, (res) => {
+              if (res.statusCode && res.statusCode < 500) {
+                res.resume();
+                finish();
+              } else {
+                res.resume();
+              }
+            });
+            req.on("error", () => {});
+          }, readiness.intervalMs ?? 500);
+          break;
+        }
+        case "log": {
+          const pattern = readiness.value instanceof RegExp ? readiness.value : new RegExp(readiness.value, "i");
+          const listener = (data: Buffer) => {
+            if (pattern.test(data.toString())) {
+              child.stdout?.off("data", listener);
+              child.stderr?.off("data", listener);
+              finish();
+            }
+          };
+          child.stdout?.on("data", listener);
+          child.stderr?.on("data", listener);
+          break;
+        }
+      }
+
+      // If process exits before readiness
+      child.on("exit", (code) => {
+        if (!resolved) {
+          finish(new Error(`Process exited (code ${code}) before readiness`));
+        }
+      });
+    });
+  }
+
   /**
    * Cleanup all managed processes
    */
@@ -474,5 +718,6 @@ export class ProcessManager extends EventEmitter {
     this.managedProcesses.clear();
     this.processLogs.clear();
     this.childProcesses.clear();
+    this.schedulePersist();
   }
 }

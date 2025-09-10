@@ -123,9 +123,11 @@ export class ProcessStateManager {
       );
 
       if (recoverableProcesses.length > 0) {
-        console.error(
-          `Found ${recoverableProcesses.length} recoverable processes from previous session`,
-        );
+        if (!this.isTestMode()) {
+          console.error(
+            `Found ${recoverableProcesses.length} recoverable processes from previous session`,
+          );
+        }
         this.recoverProcesses(recoverableProcesses);
       }
 
@@ -148,21 +150,29 @@ export class ProcessStateManager {
         if (isStillRunning) {
           // Process survived the restart - re-register it
           this.registerProcessState(processState.pid, processState.metadata);
-          console.error(
-            `Recovered running process: ${processState.metadata.name} (PID: ${processState.pid})`,
-          );
+          if (!this.isTestMode()) {
+            console.error(
+              `Recovered running process: ${processState.metadata.name} (PID: ${processState.pid})`,
+            );
+          }
         } else if (processState.metadata.isTask) {
-          // Process crashed - mark for potential restart
-          console.error(
-            `Process crashed: ${processState.metadata.name}, marked for recovery`,
-          );
-          this.markProcessForRecovery(processState);
+          // Process crashed - only mark if beyond grace period
+          if (Date.now() - processState.startTime.getTime() > this.getCrashGraceMs()) {
+            if (!this.isTestMode()) {
+              console.error(
+                `Process crashed: ${processState.metadata.name}, marked for recovery`,
+              );
+            }
+            this.markProcessForRecovery(processState);
+          }
         }
       } catch (error) {
-        console.error(
-          `Failed to recover process ${processState.metadata.name}:`,
-          error,
-        );
+        if (!this.isTestMode()) {
+          console.error(
+            `Failed to recover process ${processState.metadata.name}:`,
+            error,
+          );
+        }
       }
     }
   }
@@ -183,9 +193,22 @@ export class ProcessStateManager {
    * Mark process for recovery
    */
   private markProcessForRecovery(processState: ProcessState): void {
-    // This could integrate with the recovery manager
-    // For now, just emit an event or log
-    console.error(`Process ${processState.metadata.name} marked for recovery`);
+    if (!this.isTestMode()) {
+      console.error(`Process ${processState.metadata.name} marked for recovery`);
+    }
+  }
+
+  private isTestMode(): boolean {
+    return process.env.CI === 'true' || process.env.NODE_ENV === 'test' || !!process.env.PROCESS_HERDER_SILENT_RECOVERY;
+  }
+
+  private getCrashGraceMs(): number {
+    const val = process.env.PROCESS_HERDER_CRASH_GRACE_MS;
+    if (val) {
+      const n = parseInt(val, 10);
+      if (!isNaN(n) && n >= 0) return n;
+    }
+    return 5000; // default 5s grace
   }
 
   /**

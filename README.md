@@ -63,6 +63,128 @@ The server runs on stdio and follows the MCP protocol specification.
 
 To use this server with GitHub Copilot or other AI assistants, you'll need to configure it as an MCP server in your AI assistant's settings.
 
+#### GitHub Copilot (VS Code)
+
+1. Build (or use `npm run dev` for auto-reload):
+
+   ```bash
+   npm run build
+   ```
+
+2. Add (or extend) the `github.copilot.chat.mcpServers` section in your VS Code `settings.json` (User or Workspace):
+
+   ```jsonc
+   {
+     "github.copilot.chat.mcpServers": {
+       "process-herder": {
+         "command": "node",
+         "args": ["${workspaceFolder}/build/index.js"],
+         "cwd": "${workspaceFolder}",
+         "env": {
+           // Optional: reduce recovery noise in chats
+           "PROCESS_HERDER_SILENT_RECOVERY": "1"
+         }
+       }
+     }
+   }
+   ```
+
+3. Reload VS Code. Open Copilot Chat and run a test prompt, e.g.:
+
+   > list the available tools from process-herder
+
+If you use `npm run dev`, change `args` to `["${workspaceFolder}/build/index.js"]` after initial build is produced; or point to `src/index.ts` via `tsx`/`ts-node` if preferred (ensure dev dependency installed):
+
+```jsonc
+"args": ["${workspaceFolder}/src/index.ts"],
+"command": "npx",
+"env": { "NODE_NO_WARNINGS": "1" }
+```
+
+#### Anthropic Claude (Desktop / Web)
+
+Create or edit the Claude MCP config file:
+
+- macOS: `~/Library/Application Support/Claude/mcp/servers.json`
+- Windows: `%APPDATA%/Claude/mcp/servers.json` (e.g. `C:\\Users\\<you>\\AppData\\Roaming\\Claude\\mcp\\servers.json`)
+
+Add an entry:
+
+```jsonc
+{
+   "process-herder": {
+      "command": "node",
+      "args": ["C:/path/to/ai-vsc-process-herder/build/index.js"],
+      "env": {
+         "PROCESS_HERDER_SILENT_RECOVERY": "1"
+      },
+      "cwd": "C:/path/to/ai-vsc-process-herder"
+   }
+}
+```
+
+Restart Claude. Ask: “Use process-herder to list processes.”
+
+#### MCP CLI (Reference Client)
+
+Install the reference CLI (if not already):
+
+```bash
+npx @modelcontextprotocol/cli@latest --help
+```
+
+Run the server directly:
+
+```bash
+npx @modelcontextprotocol/cli run --server "node build/index.js"
+```
+
+Or create a simple JSON config `mcp.json`:
+
+```json
+{
+   "servers": {
+      "process-herder": {
+         "command": "node",
+         "args": ["build/index.js"],
+         "cwd": "."
+      }
+   }
+}
+```
+
+Then:
+
+```bash
+npx @modelcontextprotocol/cli shell --config mcp.json
+```
+
+Test inside the shell:
+
+```text
+> tools list process-herder
+> call process-herder list-processes
+```
+
+#### Quick Verification Prompts
+
+- “list the available tools”
+- “start a backend dev server on port 3000 using start-process”
+- “start-test-run with a backend (port 3000) and tests that log READY”
+
+#### Useful Environment Variables
+
+- `PROCESS_HERDER_SILENT_RECOVERY=1` suppresses verbose recovery chatter (good for chat sessions & CI).
+- `PROCESS_HERDER_CRASH_GRACE_MS=5000` customizes crash grace period (milliseconds) before classifying exits as failures.
+
+#### Troubleshooting
+
+- If tools don’t appear: ensure `npm run build` completed and paths are correct (Windows paths require escaped backslashes in JSON).
+- If readiness never resolves: verify port/URL/log pattern and increase `timeoutMs` in the readiness spec.
+- If duplicate processes spawn unexpectedly: add `singleton:true` to `start-process` or backend/frontend sections in `start-test-run`.
+
+---
+
 ## 🔧 Available Tools
 
 ### Core Process Management
@@ -134,6 +256,7 @@ Input shape (conceptual):
       | { type: "log", value: string, timeoutMs?: number }
 }
 ```
+
 Return fields (subset): `processId`, `reused?`, `role?`, `ready?`, `readyAt?`.
 
 Use cases:

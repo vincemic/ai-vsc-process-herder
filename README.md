@@ -5,6 +5,7 @@ A TypeScript-based MCP (Model Context Protocol) server that provides **enterpris
 ## 🚀 Features
 
 ### Core Process Management (Overview)
+
 - **VS Code Tasks Integration**: Read and execute tasks from `tasks.json`
 - **Process Lifecycle Management**: Start, stop, restart, and monitor processes
 - **Direct Process Spawning (`start-process`)**: Launch arbitrary commands outside of tasks.json with structured metadata

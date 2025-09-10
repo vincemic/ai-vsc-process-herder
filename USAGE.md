@@ -3,11 +3,13 @@
 ## Installation and Setup
 
 1. **Build the project:**
+
    ```bash
    npm run build
    ```
 
 2. **Test the server:**
+
    ```bash
    node test-server.js
    ```
@@ -15,6 +17,7 @@
 ## MCP Server Integration
 
 ### For Claude Desktop
+
 Add to your Claude Desktop configuration (`%APPDATA%\Claude\claude_desktop_config.json`):
 
 ```json
@@ -30,17 +33,20 @@ Add to your Claude Desktop configuration (`%APPDATA%\Claude\claude_desktop_confi
 ```
 
 ### For GitHub Copilot
+
 The server will be available to GitHub Copilot when configured as an MCP server in VS Code extensions.
 
 ## Available Tools
 
 ### 1. `list-tasks`
+
 Lists all VS Code tasks from `.vscode/tasks.json`
 
 **Example usage:**
 "List the available VS Code tasks"
 
 ### 2. `start-task`
+
 Starts a specific VS Code task by name
 
 **Example usage:**

@@ -55,10 +55,10 @@ npx playwright install
 ### All Tests
 ```bash
 # Run all Playwright tests
-npm run test:playwright
+npm test
 
-# Run all tests (Jest + Playwright)
-npm run test:all
+# Run tests with UI
+npm run test:ui
 ```
 
 ### Specific Test Categories

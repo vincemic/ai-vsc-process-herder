@@ -42,6 +42,7 @@ export interface HealthThresholds {
 export class HealthMonitor extends EventEmitter {
   private healthHistory = new Map<number, HealthCheckResult[]>();
   private intervalIds = new Map<number, NodeJS.Timeout>();
+  private restartCounts = new Map<number, number>();
   private thresholds: HealthThresholds;
 
   constructor(thresholds?: Partial<HealthThresholds>) {
@@ -99,6 +100,7 @@ export class HealthMonitor extends EventEmitter {
     if (intervalId) {
       clearInterval(intervalId);
       this.intervalIds.delete(pid);
+      this.restartCounts.delete(pid);
       this.emit("monitoring-stopped", pid);
     }
   }
@@ -299,7 +301,83 @@ export class HealthMonitor extends EventEmitter {
   }
 
   /**
-   * Get process information (placeholder - would use ps-list in real implementation)
+   * Record a process restart
+   */
+  recordProcessRestart(pid: number): void {
+    const currentCount = this.restartCounts.get(pid) || 0;
+    this.restartCounts.set(pid, currentCount + 1);
+    this.emit("process-restarted", { pid, restartCount: currentCount + 1 });
+  }
+
+  /**
+   * Measure response time for process (basic ping test)
+   */
+  private async measureResponseTime(
+    pid: number,
+    metadata: ProcessMetadata,
+  ): Promise<number | undefined> {
+    // If process has readiness probe, use it for response time measurement
+    if (metadata.readiness) {
+      const startTime = Date.now();
+      try {
+        if (metadata.readiness.type === "port") {
+          const port = typeof metadata.readiness.value === 'string' 
+            ? parseInt(metadata.readiness.value) 
+            : metadata.readiness.value;
+          await this.testPortConnection(port);
+          return Date.now() - startTime;
+        } else if (metadata.readiness.type === "http") {
+          await this.testHttpConnection(metadata.readiness.value);
+          return Date.now() - startTime;
+        }
+      } catch (error) {
+        // If readiness check fails, don't return response time
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Test TCP port connection
+   */
+  private testPortConnection(port: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const net = require("net");
+      const socket = net.createConnection({ port }, () => {
+        socket.destroy();
+        resolve();
+      });
+      socket.on("error", () => {
+        socket.destroy();
+        reject(new Error(`Port ${port} not reachable`));
+      });
+      socket.setTimeout(5000, () => {
+        socket.destroy();
+        reject(new Error(`Port ${port} timeout`));
+      });
+    });
+  }
+
+  /**
+   * Test HTTP connection
+   */
+  private testHttpConnection(url: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const https = url.startsWith("https:") ? require("https") : require("http");
+      const req = https.get(url, (res: any) => {
+        resolve();
+      });
+      req.on("error", reject);
+      req.setTimeout(5000, () => {
+        req.destroy();
+        reject(new Error(`HTTP request timeout for ${url}`));
+      });
+    });
+  }
+
+  /**
+   * Get process info from system
    */
   private async getProcessInfo(pid: number): Promise<any | null> {
     // This would integrate with ps-list or similar
@@ -310,6 +388,20 @@ export class HealthMonitor extends EventEmitter {
     } catch (error) {
       return null;
     }
+  }
+
+  /**
+   * Safely get time from a Date object or date string
+   */
+  private safeDateToTime(date: Date | string | undefined): number | undefined {
+    if (!date) return undefined;
+    if (typeof date === 'string') {
+      return new Date(date).getTime();
+    }
+    if (date instanceof Date) {
+      return date.getTime();
+    }
+    return undefined;
   }
 
   /**
@@ -327,7 +419,7 @@ export class HealthMonitor extends EventEmitter {
     const cpuUsage = processInfo.cpu || 0;
     const memoryUsage = processInfo.memory || 0;
     const uptime = metadata.startTime
-      ? Date.now() - metadata.startTime.getTime()
+      ? Date.now() - this.safeDateToTime(metadata.startTime)!
       : 0;
     const errorCount =
       metadata.logs?.filter((log) => log.includes("[ERROR]")).length || 0;
@@ -351,8 +443,8 @@ export class HealthMonitor extends EventEmitter {
       memoryTrend,
       uptime,
       errorCount,
-      restartCount: 0, // TODO: Track this
-      responseTime: undefined, // TODO: Implement ping test
+      restartCount: this.restartCounts.get(pid) || 0,
+      responseTime: await this.measureResponseTime(pid, metadata)
     };
   }
 

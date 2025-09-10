@@ -89,7 +89,7 @@ npm run test:playwright:headed # See browser actions
 
 # Utilities
 npm run test:cleanup       # Clean up test environment
-npm run test:all          # Jest + Playwright tests
+npm test                  # Run all Playwright tests
 ```
 
 ## 📊 Test Results Summary

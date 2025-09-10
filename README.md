@@ -507,9 +507,20 @@ The server provides comprehensive error handling with:
 
 ## 🧪 Testing
 
+The project uses Playwright for comprehensive end-to-end testing:
+
 ```bash
-# Run tests (when implemented)
+# Run all tests
 npm test
+
+# Run tests with UI
+npm run test:ui
+
+# Run tests in debug mode
+npm run test:debug
+
+# Show test report
+npm run test:report
 
 # Lint code
 npm run lint
@@ -517,6 +528,8 @@ npm run lint
 # Format code
 npm run format
 ```
+
+Test results are available in the `playwright-report/` directory after running tests.
 
 ## 📁 Project Structure
 

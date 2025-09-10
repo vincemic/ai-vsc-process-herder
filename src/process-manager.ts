@@ -433,6 +433,20 @@ export class ProcessManager extends EventEmitter {
   }
 
   /**
+   * Safely get time from a Date object or date string
+   */
+  private safeDateToTime(date: Date | string | undefined): number | undefined {
+    if (!date) return undefined;
+    if (typeof date === 'string') {
+      return new Date(date).getTime();
+    }
+    if (date instanceof Date) {
+      return date.getTime();
+    }
+    return undefined;
+  }
+
+  /**
    * Get detailed status for a specific process
    */
   async getProcessStatus(
@@ -474,7 +488,7 @@ export class ProcessManager extends EventEmitter {
           isRunning: false,
           startTime: metadata?.startTime,
           uptime: metadata?.startTime
-            ? Date.now() - metadata.startTime.getTime()
+            ? Date.now() - this.safeDateToTime(metadata.startTime)!
             : undefined,
           command: metadata?.command,
           args: metadata?.args,
@@ -495,7 +509,7 @@ export class ProcessManager extends EventEmitter {
         isRunning: true,
         startTime: metadata?.startTime,
         uptime: metadata?.startTime
-          ? Date.now() - metadata.startTime.getTime()
+          ? Date.now() - this.safeDateToTime(metadata.startTime)!
           : undefined,
         cpu: processInfo.cpu,
         memory: processInfo.memory,

@@ -254,6 +254,20 @@ export class ProcessRecoveryManager extends EventEmitter {
   }
 
   /**
+   * Safely get time from a Date object or date string
+   */
+  private safeDateToTime(date: Date | string | undefined): number | undefined {
+    if (!date) return undefined;
+    if (typeof date === 'string') {
+      return new Date(date).getTime();
+    }
+    if (date instanceof Date) {
+      return date.getTime();
+    }
+    return undefined;
+  }
+
+  /**
    * Check if a recovery strategy should be applied
    */
   private async shouldApplyStrategy(
@@ -264,7 +278,7 @@ export class ProcessRecoveryManager extends EventEmitter {
     const attempts = this.getRecoveryAttempts(healthResult.pid, strategy.name);
     if (attempts.length >= strategy.maxAttempts) {
       const lastAttempt = attempts[attempts.length - 1];
-      const timeSinceLastAttempt = Date.now() - lastAttempt.timestamp.getTime();
+      const timeSinceLastAttempt = Date.now() - (this.safeDateToTime(lastAttempt.timestamp) || 0);
 
       if (timeSinceLastAttempt < strategy.cooldownPeriod) {
         return false; // Still in cooldown period
@@ -426,6 +440,7 @@ export class ProcessRecoveryManager extends EventEmitter {
     switch (action.type) {
       case "restart":
         await this.processManager.restartProcess(healthResult.pid);
+        this.healthMonitor.recordProcessRestart(healthResult.pid);
         break;
 
       case "kill-restart":

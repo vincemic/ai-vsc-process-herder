@@ -103,6 +103,65 @@ export class ProcessStateManager {
   }
 
   /**
+   * Safely get time from a Date object or date string
+   */
+  private safeDateToTime(date: Date | string | undefined): number | undefined {
+    if (!date) return undefined;
+    if (typeof date === 'string') {
+      return new Date(date).getTime();
+    }
+    if (date instanceof Date) {
+      return date.getTime();
+    }
+    return undefined;
+  }
+
+  /**
+   * Deserialize session data from JSON, converting string dates back to Date objects
+   */
+  private deserializeSessionData(rawSession: any): SessionData {
+    const session: SessionData = {
+      ...rawSession,
+      startTime: new Date(rawSession.startTime),
+      endTime: rawSession.endTime ? new Date(rawSession.endTime) : undefined,
+      processes: rawSession.processes.map((p: any) => ({
+        ...p,
+        startTime: new Date(p.startTime),
+        lastSeen: new Date(p.lastSeen),
+        metadata: {
+          ...p.metadata,
+          startTime: p.metadata.startTime ? new Date(p.metadata.startTime) : undefined,
+          readyAt: p.metadata.readyAt ? new Date(p.metadata.readyAt) : undefined,
+        },
+      })),
+    };
+    
+    return session;
+  }
+
+  /**
+   * Deserialize snapshot data from JSON, converting string dates back to Date objects
+   */
+  private deserializeSnapshotData(rawSnapshot: any): ProcessSnapshot {
+    const snapshot: ProcessSnapshot = {
+      ...rawSnapshot,
+      timestamp: new Date(rawSnapshot.timestamp),
+      processes: rawSnapshot.processes.map((p: any) => ({
+        ...p,
+        startTime: new Date(p.startTime),
+        lastSeen: new Date(p.lastSeen),
+        metadata: {
+          ...p.metadata,
+          startTime: p.metadata.startTime ? new Date(p.metadata.startTime) : undefined,
+          readyAt: p.metadata.readyAt ? new Date(p.metadata.readyAt) : undefined,
+        },
+      })),
+    };
+    
+    return snapshot;
+  }
+
+  /**
    * Load previous state from disk
    */
   private loadPreviousState(): void {
@@ -112,14 +171,17 @@ export class ProcessStateManager {
 
     try {
       const stateData = fs.readFileSync(this.stateFile, "utf8");
-      const previousSession: SessionData = JSON.parse(stateData);
+      const rawSession = JSON.parse(stateData);
+      
+      // Deserialize dates properly
+      const previousSession: SessionData = this.deserializeSessionData(rawSession);
 
       // Process recovery logic - check if any processes should be restored
       const recoverableProcesses = previousSession.processes.filter(
         (p) =>
           p.status === "running" &&
           p.metadata.isTask &&
-          Date.now() - new Date(p.lastSeen).getTime() < 300000, // 5 minutes
+          Date.now() - (this.safeDateToTime(p.lastSeen) || 0) < 300000, // 5 minutes
       );
 
       if (recoverableProcesses.length > 0) {
@@ -157,7 +219,7 @@ export class ProcessStateManager {
           }
         } else if (processState.metadata.isTask) {
           // Process crashed - only mark if beyond grace period
-          if (Date.now() - processState.startTime.getTime() > this.getCrashGraceMs()) {
+          if (Date.now() - (this.safeDateToTime(processState.startTime) || 0) > this.getCrashGraceMs()) {
             if (!this.isTestMode()) {
               console.error(
                 `Process crashed: ${processState.metadata.name}, marked for recovery`,
@@ -513,7 +575,10 @@ export class ProcessStateManager {
     try {
       const filePath = path.join(this.snapshotDir, filename);
       const snapshotData = fs.readFileSync(filePath, "utf8");
-      return JSON.parse(snapshotData);
+      const rawSnapshot = JSON.parse(snapshotData);
+      
+      // Deserialize dates properly
+      return this.deserializeSnapshotData(rawSnapshot);
     } catch (error) {
       return null;
     }
@@ -624,7 +689,7 @@ export class ProcessStateManager {
   } {
     const now = new Date();
     const sessionDuration =
-      now.getTime() - this.currentSession.startTime.getTime();
+      now.getTime() - (this.safeDateToTime(this.currentSession.startTime) || now.getTime());
 
     return {
       sessionDuration,

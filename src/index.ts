@@ -1360,6 +1360,67 @@ class VSCodeProcessHerderServer {
       },
     );
 
+    // Resource: Process summary (lightweight overview of managed processes)
+    this.server.registerResource(
+      "process-summary",
+      "process://summary",
+      {
+        title: "Process Summary",
+        description: "Structured summary of all managed processes (id, role, readiness, reuse, health)"
+      },
+      async () => {
+        try {
+          const processes = await this.processManager.listProcesses();
+          const summary = processes.map((p: any) => {
+            const md = p.metadata || {}; 
+            return {
+              id: p.id,
+              pid: p.pid,
+              name: md.name || md.command || `pid-${p.pid}`,
+              role: md.role,
+              command: md.command,
+              cwd: md.cwd,
+              singleton: md.singleton || false,
+              reused: md.reused || false,
+              ready: md.ready || false,
+              readyAt: md.readyAt || null,
+              startTime: md.startTime || null,
+              crashed: md.crashed || false,
+              exitCode: md.exitCode ?? null,
+              lastError: md.lastError || null
+            };
+          });
+          const stats = {
+            total: summary.length,
+            byRole: summary.reduce((acc: any, s) => { acc[s.role || 'unassigned'] = (acc[s.role || 'unassigned']||0)+1; return acc; }, {}),
+            ready: summary.filter(s => s.ready).length,
+            crashed: summary.filter(s => s.crashed).length,
+            singletons: summary.filter(s => s.singleton).length,
+            reused: summary.filter(s => s.reused).length
+          };
+          return {
+            contents: [
+              {
+                uri: "process://summary",
+                text: JSON.stringify({ stats, processes: summary }, null, 2),
+                mimeType: "application/json"
+              }
+            ]
+          };
+        } catch (error) {
+          return {
+            contents: [
+              {
+                uri: "process://summary",
+                text: `Error building process summary: ${error instanceof Error ? error.message : String(error)}`,
+                mimeType: "text/plain"
+              }
+            ]
+          };
+        }
+      }
+    );
+
     // Resource: Process logs
     this.server.registerResource(
       "process-logs",
@@ -1434,6 +1495,32 @@ Please suggest the most relevant tasks for my project type and current state.`,
           ],
         };
       },
+    );
+
+    // Prompt: Process summary & guidance
+    this.server.registerPrompt(
+      "process-summary",
+      {
+        title: "Process Summary Overview",
+        description: "Get a concise summary of current managed processes with suggested next actions"
+      },
+      async () => {
+        const processes = await this.processManager.listProcesses().catch(() => []);
+        const byRole: Record<string, number> = {};
+        processes.forEach((p: any) => { const r = p.metadata?.role || 'unassigned'; byRole[r] = (byRole[r]||0)+1; });
+        const notReady = processes.filter((p: any) => p.metadata && !p.metadata.ready);
+        const crashed = processes.filter((p: any) => p.metadata?.crashed);
+        const singletons = processes.filter((p: any) => p.metadata?.singleton);
+        const text = `Managed processes: ${processes.length}\nRoles: ${Object.entries(byRole).map(([r,c])=>`${r}:${c}`).join(', ')}\nReady: ${processes.filter((p:any)=>p.metadata?.ready).length}\nNot Ready: ${notReady.length}\nCrashed: ${crashed.length}\nSingletons: ${singletons.length}\n\nSuggested next steps:\n- Use tool 'list-processes' for full detail.\n- Start missing core services with start-process (set singleton:true).\n- Investigate crashed processes via get-process-status.\n- Run coordinated tests with start-test-run if backend/frontend are ready.`;
+        return {
+          messages: [
+            {
+              role: "user",
+              content: { type: "text", text }
+            }
+          ]
+        };
+      }
     );
   }
 

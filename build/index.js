@@ -12,6 +12,15 @@ import { ProcessStateManager } from "./state-manager.js";
 import { LoggingManager } from "./logging-manager.js";
 import { inferRole } from "./role-classifier.js";
 import { TestRunManager } from "./test-run-manager.js";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+// Get version from package.json
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJsonPath = join(__dirname, "..", "package.json");
+const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+const VERSION = packageJson.version;
 /**
  * VS Code Process Herder MCP Server
  *
@@ -33,7 +42,7 @@ class VSCodeProcessHerderServer {
     constructor() {
         this.server = new McpServer({
             name: "vscode-process-herder",
-            version: "1.0.0",
+            version: VERSION,
         }, {
             capabilities: {
                 tools: {},
@@ -1246,11 +1255,17 @@ Please suggest the most relevant tasks for my project type and current state.`,
     }
 }
 /**
+ * Display version information
+ */
+function showVersion() {
+    console.log(`${packageJson.name} v${VERSION}`);
+}
+/**
  * Display help documentation
  */
 function showHelp() {
     console.log(`
-VS Code Process Herder MCP Server v1.0.1
+VS Code Process Herder MCP Server v${VERSION}
 ==========================================
 
 DESCRIPTION:
@@ -1265,6 +1280,7 @@ USAGE:
   npm run dev [-- OPTIONS]
 
 OPTIONS:
+  --version, -v       Show version information and exit
   --help, -h          Show this help message and exit
   
 FEATURES:
@@ -1315,6 +1331,20 @@ CONFIGURATION:
   Place an MCP configuration file (mcp.json or mcp-config.json) in your workspace
   to configure the server for use with MCP clients.
 
+  For MCP client registration, add this server to your client configuration:
+  {
+    "servers": {
+      "process-herder": {
+        "command": "node",
+        "args": ["build/index.js"],
+        "cwd": "/path/to/ai-vsc-process-herder"
+      }
+    }
+  }
+
+  Use 'npm run mcp:config' to show the local configuration.
+  Use 'npm run mcp:install' to show registration instructions.
+
 EXAMPLES:
   # Start the server (typically called by MCP clients)
   vscode-process-herder
@@ -1339,6 +1369,11 @@ LICENSE:
 async function main() {
     // Parse command line arguments
     const args = process.argv.slice(2);
+    // Check for version flag
+    if (args.includes('--version') || args.includes('-v')) {
+        showVersion();
+        process.exit(0);
+    }
     // Check for help flag
     if (args.includes('--help') || args.includes('-h')) {
         showHelp();

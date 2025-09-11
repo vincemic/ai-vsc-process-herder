@@ -29,28 +29,43 @@ A TypeScript-based MCP (Model Context Protocol) server that provides **enterpris
 
 ## 🛠 Installation
 
-### Option 1: Global Installation from GitHub (Recommended)
+### Option 1: Global Installation from NPM (Recommended)
 
-This is the easiest way to install and use the VS Code Process Herder MCP server across all your projects.
+Install the latest stable release from npm:
 
-#### Prerequisites
-
-- Node.js 18 or higher
-- npm (comes with Node.js)
-- Git (for GitHub access)
-
-#### Install Globally
-
-```powershell
-npm install -g git+https://github.com/vincemic/ai-vsc-process-herder.git
+```bash
+npm install -g vscode-process-herder-mcp
 ```
 
-This command will:
+### Option 2: Install from GitHub Releases
 
-1. Clone the repository from GitHub
-2. Install dependencies
-3. Build the TypeScript project
-4. Install the `vscode-process-herder` command globally
+Download the latest release from the [Releases page](https://github.com/vincemic/ai-vsc-process-herder/releases):
+
+```bash
+# Download and install the tarball
+wget https://github.com/vincemic/ai-vsc-process-herder/releases/latest/download/vscode-process-herder-mcp-1.0.0.tgz
+npm install -g ./vscode-process-herder-mcp-1.0.0.tgz
+```
+
+### Option 3: Install Standalone Executables
+
+For environments without Node.js, download platform-specific executables from [Releases](https://github.com/vincemic/ai-vsc-process-herder/releases):
+
+- **Linux**: `vscode-process-herder-linux`
+- **Windows**: `vscode-process-herder-win.exe`
+- **macOS**: `vscode-process-herder-macos`
+
+### Option 4: Development Installation from Source
+
+Clone and build from source for the latest development version:
+
+```bash
+git clone https://github.com/vincemic/ai-vsc-process-herder.git
+cd ai-vsc-process-herder
+npm install
+npm run build
+npm link  # or npm install -g .
+```
 
 #### Verify Installation
 

@@ -1,0 +1,285 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18, 20]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Lint code
+        run: npm run lint
+      
+      - name: Build project
+        run: npm run build
+      
+      - name: Run tests
+        run: npm test --if-present
+      
+      - name: Create package
+        run: npm pack
+        if: matrix.node-version == 20
+      
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        if: matrix.node-version == 20
+        with:
+          name: npm-package
+          path: '*.tgz'
+          retention-days: 90
+
+  create-release:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build project
+        run: npm run build
+      
+      - name: Create package
+        run: npm pack
+      
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: ./artifacts/
+      
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_no_v=${VERSION#v}" >> $GITHUB_OUTPUT
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the latest tag before this one
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          
+          if [ -z "$PREVIOUS_TAG" ]; then
+            # If no previous tag, get all commits
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            # Get commits since the previous tag
+            CHANGELOG=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          fi
+          
+          # Create changelog with proper formatting
+          cat << EOF > CHANGELOG.md
+          # Changes in ${{ steps.version.outputs.version }}
+          
+          ## What's Changed
+          
+          $CHANGELOG
+          
+          ## Installation
+          
+          ### Global Installation
+          \`\`\`bash
+          npm install -g vscode-process-herder-mcp
+          \`\`\`
+          
+          ### Local Installation
+          \`\`\`bash
+          npm install vscode-process-herder-mcp
+          \`\`\`
+          
+          ### From Release Assets
+          Download the \`.tgz\` file and install:
+          \`\`\`bash
+          npm install -g ./vscode-process-herder-mcp-${{ steps.version.outputs.version_no_v }}.tgz
+          \`\`\`
+          
+          ## Usage
+          
+          See the [README](https://github.com/vincemic/ai-vsc-process-herder#usage) for detailed usage instructions.
+          EOF
+          
+          # Set multiline output
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat CHANGELOG.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: VS Code Process Herder MCP ${{ steps.version.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+      
+      - name: Upload NPM Package to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./vscode-process-herder-mcp-${{ steps.version.outputs.version_no_v }}.tgz
+          asset_name: vscode-process-herder-mcp-${{ steps.version.outputs.version_no_v }}.tgz
+          asset_content_type: application/gzip
+
+  publish-npm:
+    needs: [build-and-test, create-release]
+    runs-on: ubuntu-latest
+    if: (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') && !contains(github.ref, '-')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build project
+        run: npm run build
+      
+      - name: Publish to NPM
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        if: env.NODE_AUTH_TOKEN != ''
+
+  build-executables:
+    needs: build-and-test
+    runs-on: ${{ matrix.os }}
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            binary-name: vscode-process-herder-linux
+          - os: windows-latest
+            target: win-x64
+            binary-name: vscode-process-herder-win.exe
+          - os: macos-latest
+            target: macos-x64
+            binary-name: vscode-process-herder-macos
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build project
+        run: npm run build
+      
+      - name: Install pkg globally
+        run: npm install -g pkg
+      
+      - name: Create standalone executable
+        run: pkg . --target node20-${{ matrix.target }} --output ${{ matrix.binary-name }}
+      
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: executable-${{ matrix.target }}
+          path: ${{ matrix.binary-name }}*
+          retention-days: 90
+
+  upload-executables:
+    needs: [create-release, build-executables]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    strategy:
+      matrix:
+        include:
+          - target: linux-x64
+            binary-name: vscode-process-herder-linux
+          - target: win-x64
+            binary-name: vscode-process-herder-win.exe
+          - target: macos-x64
+            binary-name: vscode-process-herder-macos
+    
+    steps:
+      - name: Download executable artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: executable-${{ matrix.target }}
+          path: ./
+      
+      - name: Upload executable to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.binary-name }}
+          asset_name: ${{ matrix.binary-name }}
+          asset_content_type: application/octet-stream

@@ -8,6 +8,10 @@ yarn-error.log*
 dist/
 *.tsbuildinfo
 
+# Package artifacts
+*.tgz
+*.tar.gz
+
 # Environment variables
 .env
 .env.local

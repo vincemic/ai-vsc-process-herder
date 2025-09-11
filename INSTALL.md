@@ -19,6 +19,7 @@ npm run build
 ```
 
 3. Create and install the package:
+
 ```bash
 npm pack
 npm install -g ./vscode-process-herder-mcp-1.1.1.tgz

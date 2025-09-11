@@ -1564,8 +1564,108 @@ Please suggest the most relevant tasks for my project type and current state.`,
   }
 }
 
+/**
+ * Display help documentation
+ */
+function showHelp() {
+  console.log(`
+VS Code Process Herder MCP Server v1.0.1
+==========================================
+
+DESCRIPTION:
+  A Model Context Protocol (MCP) server that provides intelligent process management
+  for VS Code development workflows. This server acts as a bridge between AI assistants
+  (like GitHub Copilot) and VS Code's task system, enabling standardized process 
+  management across development environments.
+
+USAGE:
+  vscode-process-herder [OPTIONS]
+  node build/index.js [OPTIONS]
+  npm run dev [-- OPTIONS]
+
+OPTIONS:
+  --help, -h          Show this help message and exit
+  
+FEATURES:
+  • VS Code Tasks Integration - Read and execute tasks from tasks.json
+  • Process Lifecycle Management - Start, stop, restart, and monitor processes
+  • Intelligent Process Detection - Automatically detect common development scenarios
+  • Status Monitoring - Query running processes and their health
+  • Multi-Project Support - Handle multiple workspace configurations
+  • Test Run Orchestration - Coordinated multi-process test execution
+  • Readiness Probes - Port/HTTP/log-based readiness gating
+  • Singleton Process Reuse - Prevent duplicate processes
+  • Health Monitoring & Auto-Recovery - Enterprise-grade reliability
+  • Comprehensive Logging & Metrics - Debug and performance insights
+
+MCP TOOLS AVAILABLE:
+  • list-tasks - List all available VS Code tasks
+  • start-task - Start a specific VS Code task by name
+  • start-process - Start arbitrary processes with advanced options
+  • stop-process - Stop running processes gracefully
+  • restart-process - Restart processes with same configuration
+  • list-processes - List all running managed processes
+  • get-process-status - Get detailed status for specific processes
+  • detect-project-type - Analyze workspace and suggest relevant tasks
+  • start-test-run - Start coordinated multi-process test runs
+  • get-test-run-status - Check status of running test runs
+  • list-test-runs - List all known test runs
+  • abort-test-run - Abort running test runs
+  • get-health-summary - Get comprehensive health overview
+  • get-process-logs - Advanced log filtering and search
+  • get-process-metrics - Performance metrics and analytics
+  • configure-recovery - Set up automatic recovery strategies
+  • export-diagnostics - Export diagnostic data for troubleshooting
+  • get-vscode-status - Check VS Code integration status
+
+PROCESS ROLES:
+  • frontend - Web servers, React/Vue/Angular dev servers
+  • backend - API servers, Node.js backends, databases  
+  • test - Unit tests, integration tests
+  • e2e - End-to-end tests, Playwright, Cypress
+  • utility - Build tools, linters, formatters
+
+READINESS PROBES:
+  • Port probes - Wait for TCP port to accept connections
+  • HTTP probes - Wait for HTTP endpoint to respond
+  • Log probes - Wait for specific log patterns
+
+CONFIGURATION:
+  Place an MCP configuration file (mcp.json or mcp-config.json) in your workspace
+  to configure the server for use with MCP clients.
+
+EXAMPLES:
+  # Start the server (typically called by MCP clients)
+  vscode-process-herder
+  
+  # Show this help
+  vscode-process-herder --help
+  
+  # Development mode with TypeScript
+  npm run dev
+
+DOCUMENTATION:
+  See README.md for detailed usage instructions and examples.
+  
+PROJECT WEBSITE:
+  https://github.com/vincemic/ai-vsc-process-herder
+
+LICENSE:
+  MIT License - see LICENSE file for details
+`);
+}
+
 // Start the server
 async function main() {
+  // Parse command line arguments
+  const args = process.argv.slice(2);
+  
+  // Check for help flag
+  if (args.includes('--help') || args.includes('-h')) {
+    showHelp();
+    process.exit(0);
+  }
+  
   const server = new VSCodeProcessHerderServer();
   await server.connect();
   console.error("VS Code Process Herder MCP Server running on stdio");

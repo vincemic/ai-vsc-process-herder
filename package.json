@@ -8,7 +8,7 @@
     "vscode-process-herder": "./build/index.js"
   },
   "scripts": {
-    "prepare": "npm run build",
+    "prepublishOnly": "npm run build",
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "mcp:run": "node build/index.js",
@@ -38,26 +38,28 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@types/cross-spawn": "^6.0.6",
-    "@types/node": "^20.19.13",
     "cross-spawn": "^7.0.3",
     "ps-list": "^8.1.1",
     "tree-kill": "^1.2.2",
-    "typescript": "^5.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^20.19.13",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.0.0",
     "playwright": "^1.55.0",
     "prettier": "^3.0.0",
-    "tsx": "^4.0.0"
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
   },
   "files": [
     "build",
-    "README.md"
+    "src",
+    "README.md",
+    "tsconfig.json"
   ],
   "engines": {
     "node": ">=18.0.0"

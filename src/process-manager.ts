@@ -719,6 +719,12 @@ export class ProcessManager extends EventEmitter {
    * Cleanup all managed processes
    */
   async cleanup(): Promise<void> {
+    // Clear any pending persist timer
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = undefined;
+    }
+
     const managedPids = Array.from(this.managedProcesses.keys());
 
     for (const pid of managedPids) {
@@ -732,6 +738,8 @@ export class ProcessManager extends EventEmitter {
     this.managedProcesses.clear();
     this.processLogs.clear();
     this.childProcesses.clear();
-    this.schedulePersist();
+    
+    // Persist final state without scheduling new timer
+    this.persistState();
   }
 }

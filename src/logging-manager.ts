@@ -57,6 +57,7 @@ export class LoggingManager extends EventEmitter {
   private maxLogEntries: number;
   private logLevel: LogLevel;
   private categories = new Set<string>();
+  private saveInterval?: NodeJS.Timeout;
 
   constructor(
     workspaceRoot?: string,
@@ -673,7 +674,7 @@ export class LoggingManager extends EventEmitter {
    */
   private setupPeriodicSave(): void {
     // Save logs and metrics every 60 seconds
-    setInterval(() => {
+    this.saveInterval = setInterval(() => {
       this.saveLogs();
       this.saveMetrics();
     }, 60000);
@@ -689,6 +690,12 @@ export class LoggingManager extends EventEmitter {
    * Cleanup logging manager
    */
   cleanup(): void {
+    // Clear the periodic save interval
+    if (this.saveInterval) {
+      clearInterval(this.saveInterval);
+      this.saveInterval = undefined;
+    }
+
     this.saveLogs();
     this.saveMetrics();
     this.removeAllListeners();

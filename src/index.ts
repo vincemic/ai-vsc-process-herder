@@ -1529,9 +1529,20 @@ Please suggest the most relevant tasks for my project type and current state.`,
     await this.server.connect(transport);
 
     // Setup cleanup handlers
-    process.on("SIGINT", () => this.cleanup());
-    process.on("SIGTERM", () => this.cleanup());
+    process.on("SIGINT", () => this.handleShutdown("SIGINT"));
+    process.on("SIGTERM", () => this.handleShutdown("SIGTERM"));
     process.on("exit", () => this.cleanup());
+  }
+
+  private handleShutdown(signal: string) {
+    console.error(`Received ${signal}, shutting down gracefully...`);
+    this.cleanup().then(() => {
+      console.error("Shutdown complete");
+      process.exit(0);
+    }).catch((error) => {
+      console.error("Error during shutdown:", error);
+      process.exit(1);
+    });
   }
 
   private async cleanup() {
@@ -1548,6 +1559,7 @@ Please suggest the most relevant tasks for my project type and current state.`,
       this.loggingManager?.info("system", "Process Herder shutdown completed");
     } catch (error) {
       console.error("Error during cleanup:", error);
+      throw error;
     }
   }
 }

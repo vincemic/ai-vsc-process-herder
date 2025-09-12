@@ -8,11 +8,14 @@ export class ProcessRecoveryManager extends EventEmitter {
     recoveryConfigs = new Map();
     recoveryAttempts = new Map();
     conditionTimers = new Map();
+    shuttingDownProcesses = new Set();
+    globalShutdown = false;
     constructor(processManager, healthMonitor) {
         super();
         this.processManager = processManager;
         this.healthMonitor = healthMonitor;
         this.setupEventListeners();
+        this.setupProcessManagerListeners();
         this.loadDefaultStrategies();
     }
     /**
@@ -24,6 +27,30 @@ export class ProcessRecoveryManager extends EventEmitter {
         });
         this.healthMonitor.on("critical", (healthResult) => {
             this.handleCriticalProcess(healthResult);
+        });
+    }
+    /**
+     * Set up event listeners for process manager shutdown coordination
+     */
+    setupProcessManagerListeners() {
+        this.processManager.on("processShuttingDown", (pid) => {
+            this.shuttingDownProcesses.add(pid);
+            // Clear any ongoing recovery attempts for this process
+            this.clearRecoveryAttempts(pid);
+        });
+        this.processManager.on("processShutdownIntentional", (pid) => {
+            this.shuttingDownProcesses.add(pid);
+            this.clearRecoveryAttempts(pid);
+        });
+        this.processManager.on("globalShutdown", () => {
+            this.globalShutdown = true;
+            // Clear all recovery attempts during global shutdown
+            this.recoveryAttempts.clear();
+            // Clear all condition timers
+            for (const timer of this.conditionTimers.values()) {
+                clearTimeout(timer);
+            }
+            this.conditionTimers.clear();
         });
     }
     /**
@@ -141,6 +168,10 @@ export class ProcessRecoveryManager extends EventEmitter {
      * Handle unhealthy process
      */
     async handleUnhealthyProcess(healthResult) {
+        // Skip recovery for processes that are shutting down
+        if (this.shuttingDownProcesses.has(healthResult.pid) || this.globalShutdown) {
+            return;
+        }
         const config = this.getProcessConfig(healthResult.name);
         for (const strategy of config.strategies) {
             if (!strategy.enabled)
@@ -155,6 +186,10 @@ export class ProcessRecoveryManager extends EventEmitter {
      * Handle critical process issues
      */
     async handleCriticalProcess(healthResult) {
+        // Skip recovery for processes that are shutting down
+        if (this.shuttingDownProcesses.has(healthResult.pid) || this.globalShutdown) {
+            return;
+        }
         this.emit("critical-alert", {
             processName: healthResult.name,
             pid: healthResult.pid,
@@ -452,6 +487,23 @@ export class ProcessRecoveryManager extends EventEmitter {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
     /**
+     * Clear recovery attempts for a specific process
+     */
+    clearRecoveryAttempts(pid) {
+        this.recoveryAttempts.delete(pid);
+        // Clear any condition timers for this process
+        const timersToDelete = [];
+        for (const [key, timer] of this.conditionTimers.entries()) {
+            if (key.startsWith(`${pid}-`)) {
+                clearTimeout(timer);
+                timersToDelete.push(key);
+            }
+        }
+        for (const key of timersToDelete) {
+            this.conditionTimers.delete(key);
+        }
+    }
+    /**
      * Cleanup recovery manager
      */
     cleanup() {
@@ -461,6 +513,8 @@ export class ProcessRecoveryManager extends EventEmitter {
         }
         this.conditionTimers.clear();
         this.recoveryAttempts.clear();
+        this.shuttingDownProcesses.clear();
+        this.globalShutdown = false;
         this.removeAllListeners();
     }
 }

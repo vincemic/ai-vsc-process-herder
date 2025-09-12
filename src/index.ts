@@ -66,6 +66,10 @@ class VSCodeProcessHerderServer {
     this.projectDetector = new ProjectDetector();
     this.vscodeIntegration = new VSCodeIntegration();
     this.healthMonitor = new HealthMonitor();
+    
+    // Connect health monitor to process manager for shutdown coordination
+    this.healthMonitor.connectToProcessManager(this.processManager);
+    
     this.recoveryManager = new ProcessRecoveryManager(
       this.processManager,
       this.healthMonitor,
@@ -974,6 +978,150 @@ class VSCodeProcessHerderServer {
       },
     );
 
+    // Tool: Check port status (listening validation + managed processes)
+    this.server.registerTool(
+      "check-port-status",
+      {
+        title: "Check Port Status",
+        description: "Validate if a TCP port is currently listening and show related managed processes",
+        inputSchema: {
+            port: z.number().describe("Port number to check"),
+            host: z.string().optional().default('127.0.0.1').describe("Host (defaults 127.0.0.1)"),
+            timeoutMs: z.number().optional().default(2000).describe("Connection timeout ms")
+        }
+      },
+      async ({ port, host = '127.0.0.1', timeoutMs = 2000 }) => {
+        try {
+          const listening = await this.processManager.checkPortOpen(port, host, timeoutMs);
+          const matches = this.processManager.findProcessesByPort(port).map(m => ({
+            pid: m.pid,
+            name: m.metadata.name,
+            role: m.metadata.role,
+            command: m.metadata.command,
+            cwd: m.metadata.cwd,
+            ready: m.metadata.ready,
+            ports: m.metadata.ports
+          }));
+          return {
+            content: [ { type: 'text', text: JSON.stringify({ port, host, listening, managedProcessCount: matches.length, processes: matches }, null, 2) } ]
+          };
+        } catch (error) {
+          return { content: [ { type: 'text', text: JSON.stringify({ error: error instanceof Error ? error.message : String(error), port }, null, 2) } ], isError: true };
+        }
+      }
+    );
+
+    // Tool: Stop processes by port (graceful stop with optional force)
+    this.server.registerTool(
+      "stop-processes-by-port",
+      {
+        title: "Stop Processes By Port",
+        description: "Stop all managed processes that reference a specified port",
+        inputSchema: {
+          port: z.number().describe("Port number"),
+          force: z.boolean().optional().default(false).describe("Force kill if graceful stop fails"),
+        }
+      },
+      async ({ port, force = false }) => {
+        try {
+          const matches = this.processManager.findProcessesByPort(port);
+          const results: any[] = [];
+            for (const m of matches) {
+              try {
+                await this.processManager.stopProcess(m.pid, force);
+                results.push({ pid: m.pid, name: m.metadata.name, stopped: true });
+              } catch (err) {
+                results.push({ pid: m.pid, name: m.metadata.name, stopped: false, error: err instanceof Error ? err.message : String(err) });
+              }
+            }
+          return { content: [ { type: 'text', text: JSON.stringify({ port, force, total: matches.length, results }, null, 2) } ] };
+        } catch (error) {
+          return { content: [ { type: 'text', text: JSON.stringify({ error: error instanceof Error ? error.message : String(error), port }, null, 2) } ], isError: true };
+        }
+      }
+    );
+
+    // Tool: Find processes by port
+    this.server.registerTool(
+      "find-processes-by-port",
+      {
+        title: "Find Processes By Port",
+        description: "Return managed processes that reference a given TCP port (heuristic detection)",
+        inputSchema: {
+          port: z.number().describe("Port number to search for"),
+        },
+      },
+      async ({ port }) => {
+        try {
+          const matches = this.processManager.findProcessesByPort(port).map(m => ({
+            pid: m.pid,
+            name: m.metadata.name,
+            command: m.metadata.command,
+            args: m.metadata.args,
+            cwd: m.metadata.cwd,
+            role: m.metadata.role,
+            ports: m.metadata.ports,
+            ready: m.metadata.ready,
+            startTime: m.metadata.startTime,
+          }));
+          return {
+            content: [
+              { type: "text", text: JSON.stringify({ port, count: matches.length, processes: matches }, null, 2) }
+            ]
+          };
+        } catch (error) {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify({ error: error instanceof Error ? error.message : String(error), port }, null, 2) }
+            ],
+            isError: true
+          };
+        }
+      }
+    );
+
+    // Tool: List all active ports
+    this.server.registerTool(
+      "list-active-ports",
+      {
+        title: "List Active Ports",
+        description: "List all ports inferred across managed processes with associated PIDs",
+        inputSchema: {},
+      },
+      async () => {
+        try {
+          const portMap = this.processManager.listAllPorts();
+          const processes = await this.processManager.listProcesses();
+          const enriched = portMap.map(entry => ({
+            port: entry.port,
+            processes: entry.pids.map(pid => {
+              const meta = processes.find(p => p.pid === pid)?.metadata;
+              return meta ? {
+                pid,
+                name: meta.name,
+                role: meta.role,
+                command: meta.command,
+                cwd: meta.cwd,
+                ready: meta.ready,
+              } : { pid };
+            })
+          }));
+          return {
+            content: [
+              { type: "text", text: JSON.stringify({ ports: enriched, totalPorts: enriched.length }, null, 2) }
+            ]
+          };
+        } catch (error) {
+          return {
+            content: [
+              { type: "text", text: JSON.stringify({ error: error instanceof Error ? error.message : String(error) }, null, 2) }
+            ],
+            isError: true
+          };
+        }
+      }
+    );
+
     // Tool: Get process logs
     this.server.registerTool(
       "get-process-logs",
@@ -1023,6 +1171,33 @@ class VSCodeProcessHerderServer {
           this.loggingManager.error("get-logs", "Failed to get process logs", {
             error: error instanceof Error ? error.message : String(error),
           });
+
+          // Tool: Detect port conflicts
+          this.server.registerTool(
+            "detect-port-conflicts",
+            {
+              title: "Detect Port Conflicts",
+              description: "List ports claimed by more than one managed process (heuristic inference)",
+              inputSchema: {}
+            },
+            async () => {
+              try {
+                const conflicts = this.processManager.detectPortConflicts();
+                return {
+                  content: [
+                    { type: "text", text: JSON.stringify({ conflicts, totalConflicts: conflicts.length, timestamp: new Date() }, null, 2) }
+                  ]
+                };
+              } catch (error) {
+                return {
+                  content: [
+                    { type: "text", text: JSON.stringify({ error: error instanceof Error ? error.message : String(error) }, null, 2) }
+                  ],
+                  isError: true
+                };
+              }
+            }
+          );
           return {
             content: [
               {
@@ -1397,7 +1572,8 @@ class VSCodeProcessHerderServer {
               startTime: md.startTime || null,
               crashed: md.crashed || false,
               exitCode: md.exitCode ?? null,
-              lastError: md.lastError || null
+              lastError: md.lastError || null,
+              ports: md.ports || []
             };
           });
           const stats = {
@@ -1408,11 +1584,12 @@ class VSCodeProcessHerderServer {
             singletons: summary.filter(s => s.singleton).length,
             reused: summary.filter(s => s.reused).length
           };
+          const ports = this.processManager.listAllPorts();
           return {
             contents: [
               {
                 uri: "process://summary",
-                text: JSON.stringify({ stats, processes: summary }, null, 2),
+                text: JSON.stringify({ stats, processes: summary, ports }, null, 2),
                 mimeType: "application/json"
               }
             ]

@@ -39,7 +39,13 @@ export declare class HealthMonitor extends EventEmitter {
     private intervalIds;
     private restartCounts;
     private thresholds;
+    private shuttingDownProcesses;
+    private globalShutdown;
     constructor(thresholds?: Partial<HealthThresholds>);
+    /**
+     * Connect to ProcessManager events for shutdown coordination
+     */
+    connectToProcessManager(processManager: any): void;
     /**
      * Start monitoring a process
      */

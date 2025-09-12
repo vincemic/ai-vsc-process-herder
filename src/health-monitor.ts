@@ -44,6 +44,8 @@ export class HealthMonitor extends EventEmitter {
   private intervalIds = new Map<number, NodeJS.Timeout>();
   private restartCounts = new Map<number, number>();
   private thresholds: HealthThresholds;
+  private shuttingDownProcesses = new Set<number>();
+  private globalShutdown = false;
 
   constructor(thresholds?: Partial<HealthThresholds>) {
     super();
@@ -55,6 +57,30 @@ export class HealthMonitor extends EventEmitter {
       unresponsiveTimeout: 30000, // 30 seconds
       ...thresholds,
     };
+  }
+
+  /**
+   * Connect to ProcessManager events for shutdown coordination
+   */
+  connectToProcessManager(processManager: any): void {
+    processManager.on("processShuttingDown", (pid: number) => {
+      this.shuttingDownProcesses.add(pid);
+      // Stop monitoring immediately to prevent false warnings
+      this.stopMonitoring(pid);
+    });
+
+    processManager.on("processShutdownIntentional", (pid: number) => {
+      this.shuttingDownProcesses.add(pid);
+      this.stopMonitoring(pid);
+    });
+
+    processManager.on("globalShutdown", () => {
+      this.globalShutdown = true;
+      // Stop all monitoring during global shutdown
+      for (const pid of this.intervalIds.keys()) {
+        this.stopMonitoring(pid);
+      }
+    });
   }
 
   /**
@@ -101,6 +127,7 @@ export class HealthMonitor extends EventEmitter {
       clearInterval(intervalId);
       this.intervalIds.delete(pid);
       this.restartCounts.delete(pid);
+      this.shuttingDownProcesses.delete(pid);
       this.emit("monitoring-stopped", pid);
     }
   }
@@ -112,6 +139,19 @@ export class HealthMonitor extends EventEmitter {
     pid: number,
     metadata: ProcessMetadata,
   ): Promise<HealthCheckResult> {
+    // Skip health checks for processes that are shutting down
+    if (this.shuttingDownProcesses.has(pid) || this.globalShutdown) {
+      return {
+        pid,
+        name: metadata.name,
+        isHealthy: true, // Consider shutting down processes as healthy
+        healthScore: 100,
+        issues: [],
+        lastCheck: new Date(),
+        metrics: this.getDefaultMetrics(),
+      };
+    }
+
     const issues: HealthIssue[] = [];
     let healthScore = 100;
     const now = new Date();
@@ -488,6 +528,8 @@ export class HealthMonitor extends EventEmitter {
     }
     this.intervalIds.clear();
     this.healthHistory.clear();
+    this.shuttingDownProcesses.clear();
+    this.globalShutdown = false;
     this.removeAllListeners();
   }
 }

@@ -7,6 +7,8 @@ export class HealthMonitor extends EventEmitter {
     intervalIds = new Map();
     restartCounts = new Map();
     thresholds;
+    shuttingDownProcesses = new Set();
+    globalShutdown = false;
     constructor(thresholds) {
         super();
         this.thresholds = {
@@ -17,6 +19,27 @@ export class HealthMonitor extends EventEmitter {
             unresponsiveTimeout: 30000, // 30 seconds
             ...thresholds,
         };
+    }
+    /**
+     * Connect to ProcessManager events for shutdown coordination
+     */
+    connectToProcessManager(processManager) {
+        processManager.on("processShuttingDown", (pid) => {
+            this.shuttingDownProcesses.add(pid);
+            // Stop monitoring immediately to prevent false warnings
+            this.stopMonitoring(pid);
+        });
+        processManager.on("processShutdownIntentional", (pid) => {
+            this.shuttingDownProcesses.add(pid);
+            this.stopMonitoring(pid);
+        });
+        processManager.on("globalShutdown", () => {
+            this.globalShutdown = true;
+            // Stop all monitoring during global shutdown
+            for (const pid of this.intervalIds.keys()) {
+                this.stopMonitoring(pid);
+            }
+        });
     }
     /**
      * Start monitoring a process
@@ -54,6 +77,7 @@ export class HealthMonitor extends EventEmitter {
             clearInterval(intervalId);
             this.intervalIds.delete(pid);
             this.restartCounts.delete(pid);
+            this.shuttingDownProcesses.delete(pid);
             this.emit("monitoring-stopped", pid);
         }
     }
@@ -61,6 +85,18 @@ export class HealthMonitor extends EventEmitter {
      * Perform comprehensive health check on a process
      */
     async performHealthCheck(pid, metadata) {
+        // Skip health checks for processes that are shutting down
+        if (this.shuttingDownProcesses.has(pid) || this.globalShutdown) {
+            return {
+                pid,
+                name: metadata.name,
+                isHealthy: true, // Consider shutting down processes as healthy
+                healthScore: 100,
+                issues: [],
+                lastCheck: new Date(),
+                metrics: this.getDefaultMetrics(),
+            };
+        }
         const issues = [];
         let healthScore = 100;
         const now = new Date();
@@ -387,6 +423,8 @@ export class HealthMonitor extends EventEmitter {
         }
         this.intervalIds.clear();
         this.healthHistory.clear();
+        this.shuttingDownProcesses.clear();
+        this.globalShutdown = false;
         this.removeAllListeners();
     }
 }

@@ -23,6 +23,7 @@ export interface ProcessMetadata {
     ready?: boolean;
     readyAt?: Date;
     reattached?: boolean;
+    ports?: number[];
 }
 export interface ProcessStatus {
     pid: number;
@@ -42,6 +43,7 @@ export interface ProcessStatus {
     ready?: boolean;
     readyAt?: Date;
     reattached?: boolean;
+    ports?: number[];
 }
 export type ProcessRole = "frontend" | "backend" | "test" | "e2e" | "utility";
 export type ReadinessConfig = {
@@ -70,7 +72,28 @@ export declare class ProcessManager extends EventEmitter {
     private stateDir;
     private stateFile;
     private persistTimer?;
+    private shuttingDownProcesses;
+    private globalShutdown;
     constructor();
+    /**
+     * Find managed processes that are using (or believed to be using) a given port
+     */
+    findProcessesByPort(port: number): {
+        pid: number;
+        metadata: ProcessMetadata;
+    }[];
+    /**
+     * Return a map of port -> processes (pids) for quick inspection
+     */
+    listAllPorts(): {
+        port: number;
+        pids: number[];
+    }[];
+    /**
+     * Check whether a TCP port is open (listening) on a host.
+     * Returns true on successful connection, false on timeout/refusal.
+     */
+    checkPortOpen(port: number, host?: string, timeoutMs?: number): Promise<boolean>;
     /**
      * Register a process for management and monitoring
      */
@@ -146,10 +169,26 @@ export declare class ProcessManager extends EventEmitter {
     private schedulePersist;
     private persistState;
     private loadState;
+    private inferPorts;
     private awaitReadiness;
     /**
      * Cleanup all managed processes
      */
     cleanup(): Promise<void>;
+    /**
+     * Detect potential port conflicts where more than one managed process claims the same port.
+     * This is heuristic (based on inferred ports) and does not guarantee an actual TCP bind conflict.
+     * Returns sorted array of { port, pids, processes } where length(pids) > 1.
+     */
+    detectPortConflicts(): {
+        port: number;
+        pids: number[];
+        processes: {
+            pid: number;
+            name: string;
+            role?: ProcessRole;
+            ready?: boolean;
+        }[];
+    }[];
 }
 //# sourceMappingURL=process-manager.d.ts.map

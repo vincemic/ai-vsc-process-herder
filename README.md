@@ -473,6 +473,8 @@ Test inside the shell:
 1. **restart-process**: Restart a process with the same configuration
 1. **list-processes**: List all running managed processes (supports optional role filtering)
 1. **get-process-status**: Get detailed status information for a specific process (includes readiness + role)
+1. **find-processes-by-port**: Given a port number, return managed processes that reference it (heuristic)
+1. **list-active-ports**: List all inferred ports across managed processes with associated PIDs/roles
 
 ### Project Analysis
 
@@ -565,6 +567,48 @@ Managed process metadata (excluding logs) is periodically persisted to `.process
 ### State & Logs
 
 Logs (last 100 entries per process) are kept in-memory; summary APIs expose recent slices. Persisted JSON intentionally omits verbose logs for performance.
+
+### 🔍 Port Tracking (New)
+
+Each managed process now attempts best-effort tracking of listening ports:
+
+- Initial inference from command/args flags (`--port`, `-p`, `:3000`, etc.), environment `PORT`, and `port` readiness probes.
+- Ongoing detection by parsing log lines for common patterns (e.g. `listening on port 3000`, `http://localhost:5173`).
+- Ports are exposed via `get-process-status` (`ports` array) and persisted in `.process-herder/processes.json` for reattachment.
+- Multiple ports are deduplicated and sorted; detection is heuristic and non-blocking.
+
+Use cases: diagnosing conflicts, orchestrating dependent services (e.g. waiting for backend before launching frontend), and surfacing environment configuration to AI assistants.
+
+#### Additional Port Tools
+
+- `check-port-status`: Actively attempts a TCP connection (default host `127.0.0.1`) to determine if a port is currently open. Useful to validate readiness beyond heuristic inference.
+- `stop-processes-by-port`: Resolves all managed processes associated with a port (via heuristics) and sends a termination signal (default `SIGTERM`, with optional forced kill after a timeout).
+- `detect-port-conflicts`: Lists ports referenced by more than one managed process (heuristic; does not guarantee actual socket bind collision but highlights potential overlaps).
+
+#### Process Summary Enhancement
+
+The `process-summary` resource now includes:
+
+- Per-process `ports` arrays (may be empty if undetected)
+- A top-level `ports` object mapping `port -> [processIds]`
+
+Example response shape:
+
+```json
+{
+  "stats": { /* counts and role breakdown */ },
+  "processes": [
+    { "id": "proc-1", "name": "npm dev", "ports": [3000], "ready": true, ... },
+    { "id": "proc-2", "name": "vite", "ports": [5173], "ready": true, ... }
+  ],
+  "ports": {
+    "3000": ["proc-1"],
+    "5173": ["proc-2"]
+  }
+}
+```
+
+This enables quick reverse lookups or conflict detection logic at the client level.
 
 ## 🏗 Architecture
 

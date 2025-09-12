@@ -1,6 +1,6 @@
 {
   "name": "vscode-process-herder-mcp",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "MCP server for VS Code process management - helps AI assistants manage development processes intelligently",
   "type": "module",
   "main": "build/index.js",
@@ -10,6 +10,7 @@
   "scripts": {
     "prepublishOnly": "npm run build",
     "build": "tsc",
+    "clean": "rimraf build",
     "dev": "tsx src/index.ts",
     "mcp:run": "node build/index.js",
     "mcp:config": "echo 'MCP Server Configuration:' && type mcp.json",
@@ -53,6 +54,7 @@
     "eslint": "^8.0.0",
     "playwright": "^1.55.0",
     "prettier": "^3.0.0",
+    "rimraf": "^5.0.5",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   },

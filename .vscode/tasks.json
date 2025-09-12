@@ -94,22 +94,13 @@
     {
       "label": "clean build",
       "type": "shell",
-      "command": "rmdir",
-      "args": ["/s", "/q", "build"],
+      "command": "npm",
+      "args": ["run", "clean"],
       "group": "build",
       "detail": "Clean the build directory",
-      "windows": {
-        "command": "rmdir",
-        "args": ["/s", "/q", "build"]
-      },
-      "linux": {
-        "command": "rm",
-        "args": ["-rf", "build"]
-      },
-      "osx": {
-        "command": "rm",
-        "args": ["-rf", "build"]
-      },
+      "windows": { "command": "npm", "args": ["run", "clean"] },
+      "linux": { "command": "npm", "args": ["run", "clean"] },
+      "osx": { "command": "npm", "args": ["run", "clean"] },
       "presentation": {
         "echo": true,
         "reveal": "silent",

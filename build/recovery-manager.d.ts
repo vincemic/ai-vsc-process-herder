@@ -46,11 +46,17 @@ export declare class ProcessRecoveryManager extends EventEmitter {
     private recoveryConfigs;
     private recoveryAttempts;
     private conditionTimers;
+    private shuttingDownProcesses;
+    private globalShutdown;
     constructor(processManager: ProcessManager, healthMonitor: HealthMonitor);
     /**
      * Set up event listeners for health monitoring
      */
     private setupEventListeners;
+    /**
+     * Set up event listeners for process manager shutdown coordination
+     */
+    private setupProcessManagerListeners;
     /**
      * Load default recovery strategies
      */
@@ -135,6 +141,10 @@ export declare class ProcessRecoveryManager extends EventEmitter {
      * Utility function for delays
      */
     private delay;
+    /**
+     * Clear recovery attempts for a specific process
+     */
+    private clearRecoveryAttempts;
     /**
      * Cleanup recovery manager
      */

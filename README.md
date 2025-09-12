@@ -39,12 +39,21 @@ npm install -g vscode-process-herder-mcp
 
 ### Option 2: Install from GitHub Releases
 
-Download the latest release from the [Releases page](https://github.com/vincemic/ai-vsc-process-herder/releases):
+Download the latest release from the [Releases page](https://github.com/vincemic/ai-vsc-process-herder/releases). Replace `1.2.0` with the newest version when available.
+
+PowerShell (Windows):
+
+```powershell
+Invoke-WebRequest -Uri "https://github.com/vincemic/ai-vsc-process-herder/releases/download/v1.2.0/vscode-process-herder-mcp-1.2.0.tgz" -OutFile vscode-process-herder-mcp-1.2.0.tgz
+npm install -g ./vscode-process-herder-mcp-1.2.0.tgz
+```
+
+macOS/Linux:
 
 ```bash
-# Download and install the tarball
-wget https://github.com/vincemic/ai-vsc-process-herder/releases/latest/download/vscode-process-herder-mcp-1.0.0.tgz
-npm install -g ./vscode-process-herder-mcp-1.0.0.tgz
+curl -L -o vscode-process-herder-mcp-1.2.0.tgz \
+  https://github.com/vincemic/ai-vsc-process-herder/releases/download/v1.2.0/vscode-process-herder-mcp-1.2.0.tgz
+npm install -g ./vscode-process-herder-mcp-1.2.0.tgz
 ```
 
 ### Option 3: Install Standalone Executables

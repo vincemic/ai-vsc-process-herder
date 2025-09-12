@@ -1,8 +1,8 @@
-# Installation Instructions for v1.1.1
+# Installation Instructions for v1.2.0
 
 ## ✅ Working Installation Methods
 
-Since we've fixed the dependency issues, here are the recommended ways to install the VS Code Process Herder MCP server globally:
+The package has stabilized further in v1.2.0 (reliability + health tooling). These are the recommended ways to install the VS Code Process Herder MCP server globally:
 
 ### Method 1: Local Package Installation (Recommended)
 
@@ -18,11 +18,11 @@ npm install
 npm run build
 ```
 
-3. Create and install the package:
+3. Create and install the package (this produces a file like `vscode-process-herder-mcp-1.2.0.tgz`):
 
 ```bash
 npm pack
-npm install -g ./vscode-process-herder-mcp-1.1.1.tgz
+npm install -g ./vscode-process-herder-mcp-1.2.0.tgz
 ```
 
 4. Verify installation:
@@ -30,30 +30,44 @@ npm install -g ./vscode-process-herder-mcp-1.1.1.tgz
 vscode-process-herder --help
 ```
 
-### Method 2: Direct from Release Asset (When Available)
+### Method 2: Direct from GitHub Release Asset
 
-Once GitHub releases are set up:
-```bash
-# Download the .tgz file from GitHub releases
-npm install -g ./vscode-process-herder-mcp-1.1.1.tgz
+Download the tarball from the latest GitHub Release (Assets section) and install globally. Example (PowerShell):
+
+```powershell
+Invoke-WebRequest -Uri "https://github.com/vincemic/ai-vsc-process-herder/releases/download/v1.2.0/vscode-process-herder-mcp-1.2.0.tgz" -OutFile vscode-process-herder-mcp-1.2.0.tgz
+npm install -g ./vscode-process-herder-mcp-1.2.0.tgz
 ```
 
-## 🐛 Known Issues
+macOS/Linux (curl):
 
-- **Windows + Git Installation**: `npm install -g git+https://github.com/...` has symlink issues on Windows (npm limitation)
-- **GitHub Actions**: Release workflow may need manual triggering
+```bash
+curl -L -o vscode-process-herder-mcp-1.2.0.tgz \
+  https://github.com/vincemic/ai-vsc-process-herder/releases/download/v1.2.0/vscode-process-herder-mcp-1.2.0.tgz
+npm install -g ./vscode-process-herder-mcp-1.2.0.tgz
+```
 
-## ✅ What Was Fixed in v1.1.1
+Replace `1.2.0` with a newer version as they are released.
 
-1. **Dependencies properly organized**: TypeScript and @types moved to devDependencies
-2. **Build script fixed**: No longer tries to compile during Git installation  
-3. **Build files included**: Pre-compiled JavaScript included in repository
-4. **Package structure corrected**: All necessary files included in npm package
+## 🐛 Known Issues / Notes
+
+- Windows Git URL installs (`npm install -g git+https://...`) may still have symlink quirks; prefer the published package or release tarball.
+- Standalone executables (added in later releases) can be used if Node.js is not desired; see README for details.
+
+## ✅ Improvements Since v1.1.1
+
+Changes in v1.2.0 relevant to installation & usage:
+
+1. **Reliability Enhancements**: Health monitoring & recovery tooling improvements (no extra steps required for install)
+2. **Process Metrics & Port Tracking**: Additional runtime observability (bundled in build output)
+3. **Documentation Updates**: Clarified global install paths & multi-platform examples
+4. **Stabilization**: Internal refactors reduce cold start overhead; no change to install commands
 
 ## 🚀 Ready to Use
 
-The package is now properly configured for global installation and includes:
-- 25+ MCP tools for process management
+The package is properly configured for global installation and includes:
+
+- 25+ MCP tools for process & test orchestration
 - VS Code tasks integration
 - Process monitoring and health management
 - Test orchestration capabilities
